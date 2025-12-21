@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/EduTrackr/static/css/main.2fc909c0.css",
+    "main.js": "/EduTrackr/static/js/main.c8c86262.js",
+    "index.html": "/EduTrackr/index.html",
+    "main.2fc909c0.css.map": "/EduTrackr/static/css/main.2fc909c0.css.map",
+    "main.c8c86262.js.map": "/EduTrackr/static/js/main.c8c86262.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.2fc909c0.css",
+    "static/js/main.c8c86262.js"
+  ]
+}
