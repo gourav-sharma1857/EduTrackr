@@ -5,9 +5,37 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background: #0f172a; /* app background to avoid white area on scroll */
+  color: #e6eef8;
 }
 
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+}
+
+/* Decorative 'rope' scrollbar (WebKit) and a simple fallback for Firefox */
+::-webkit-scrollbar {
+  width: 14px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg,#fbe8a6,#ffd6b6);
+  border-radius: 10px;
+  border: 4px solid transparent; /* space around thumb for rope look */
+  background-clip: padding-box;
+  box-shadow: inset 0 -8px 0 rgba(0,0,0,0.06);
+}
+
+/* add a decorative twist using an overlay element via a repeating-linear-gradient */
+::-webkit-scrollbar-thumb:vertical {
+  background-image: repeating-linear-gradient(135deg, rgba(0,0,0,0.08) 0 6px, rgba(255,255,255,0.04) 6px 12px);
+}
+
+/* Firefox simple thumb */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #ffd6b6 transparent;
 }
