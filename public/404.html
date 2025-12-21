@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>EduTrackr</title>
+    <script type="text/javascript">
+      // This script takes the URL the user tried to go to, 
+      // converts it into a search parameter, and redirects to index.html
+      var l = window.location;
+      l.replace(
+        l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+        l.pathname.split('/').slice(0, 1).join('/') + '/?/' +
+        l.pathname.slice(1).split('/').slice(0).join('/').replace(/&/g, '~and~') +
+        (l.search ? '&' + l.search.replace(/&/g, '~and~') : '') +
+        l.hash
+      );
+    </script>
+  </head>
+  <body>
+  </body>
+</html>
