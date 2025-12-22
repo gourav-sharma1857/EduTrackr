@@ -1,6 +1,6 @@
 # Getting Started with Create React App
 
-##Application Structure & Coding Overview
+Application Structure & Coding Overview
 
 EduTrackr is built as a modular, component-driven React application with Firebase handling authentication and data persistence. The codebase emphasizes separation of concerns, reusable components, and real-time data updates.
 
@@ -14,7 +14,7 @@ Protected routes ensure authenticated access to core pages
 
 Sidebar and Topbar persist across pages for consistent navigation
 
-##State Management
+State Management
 
 Relies on React hooks (useState, useEffect) for local state
 
@@ -137,6 +137,7 @@ Simple task-based Firestore collection
 Uses priority flags for UI emphasis
 
 Focuses on fast add/edit/complete actions
+
 ------------------------------------------------------------------
 
 Calendar View
