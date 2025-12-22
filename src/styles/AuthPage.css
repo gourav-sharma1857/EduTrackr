@@ -240,3 +240,36 @@
     padding: 20px;
   }
 }
+
+@media (max-width: 480px) {
+  .auth-container {
+    height: auto;
+    min-height: 100vh;
+    padding: 20px 0;
+  }
+
+  .auth-box {
+    width: 95%;
+    max-width: 380px;
+    height: auto; 
+    min-height: 520px;
+  }
+
+  .auth-inner {
+    height: 600px; 
+  }
+
+  .title {
+    font-size: 22px;
+    margin-bottom: 15px;
+  }
+
+  .animated-input {
+    padding: 10px; 
+    font-size: 16px; 
+  }
+
+  .submit-btn {
+    padding: 14px; 
+  }
+}
