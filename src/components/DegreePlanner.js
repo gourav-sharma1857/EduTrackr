@@ -192,54 +192,75 @@ export default function DegreePlanner() {
     
     // Get all unique completed courses from all sources
     const completedCourses = new Map(); // Use Map to avoid duplicates by course_code
-    
-    // 1. Completed from manual core requirements
-    coreReqs
-      .filter(c => c.status === "Completed" || c.status === "Transferred")
-      .forEach(c => {
-        const key = `${c.course_code}-core`;
-        if (!completedCourses.has(key)) {
-          completedCourses.set(key, c.credit_hours || 0);
-        }
-      });
+    const transferredCourses = new Map(); // separate map for transferred credits
 
-    // 2. Completed from manual major requirements
-    majorReqs
-      .filter(c => c.is_completed)
-      .forEach(c => {
-        const key = `${c.course_code}-major`;
-        if (!completedCourses.has(key)) {
-          completedCourses.set(key, c.credit_hours || 0);
-        }
-      });
+    // Helper to add to a map without duplicating
+    const addToMap = (map, key, credits) => {
+      if (!map.has(key)) map.set(key, credits || 0);
+    };
 
-    // 3. Completed from manual minor requirements
-    minorReqs
-      .filter(c => c.is_completed)
-      .forEach(c => {
-        const key = `${c.course_code}-minor`;
-        if (!completedCourses.has(key)) {
-          completedCourses.set(key, c.credit_hours || 0);
-        }
-      });
+    // 1. Manual core requirements
+    coreReqs.forEach(c => {
+      const key = `${c.course_code}-core`;
+      if (c.status === 'Transferred' || c.is_transfer) {
+        addToMap(transferredCourses, key, c.credit_hours);
+      } else if (c.status === 'Completed') {
+        addToMap(completedCourses, key, c.credit_hours);
+      }
+    });
 
-    // 4. Completed from semester courses
+    // 2. Manual major requirements
+    majorReqs.forEach(c => {
+      const key = `${c.course_code}-major`;
+      if (c.is_transfer || c.status === 'Transferred') {
+        addToMap(transferredCourses, key, c.credit_hours);
+      } else if (c.is_completed) {
+        addToMap(completedCourses, key, c.credit_hours);
+      }
+    });
+
+    // 3. Manual minor requirements
+    minorReqs.forEach(c => {
+      const key = `${c.course_code}-minor`;
+      if (c.is_transfer || c.status === 'Transferred') {
+        addToMap(transferredCourses, key, c.credit_hours);
+      } else if (c.is_completed) {
+        addToMap(completedCourses, key, c.credit_hours);
+      }
+    });
+
+    // 4. Semester courses
     semesters.forEach(sem => {
-      (sem.courses || [])
-        .filter(c => c.status === "Completed" || c.status === "Transferred")
-        .forEach(c => {
-          const key = `${c.course_code}-semester`;
-          if (!completedCourses.has(key)) {
-            completedCourses.set(key, c.credit_hours || 0);
-          }
-        });
+      (sem.courses || []).forEach(c => {
+        const key = `${c.course_code}-semester`;
+        if (c.status === 'Transferred' || c.is_transfer) {
+          addToMap(transferredCourses, key, c.credit_hours);
+        } else if (c.status === 'Completed') {
+          addToMap(completedCourses, key, c.credit_hours);
+        }
+      });
+    });
+
+    // 5. Current classes (some may be completed in DB)
+    currentClasses.forEach(c => {
+      const key = `${c.course_code}-current`;
+      if (c.is_transfer || c.status === 'Transferred') {
+        addToMap(transferredCourses, key, c.credit_hours);
+      } else if (c.is_completed || c.status === 'Completed') {
+        addToMap(completedCourses, key, c.credit_hours);
+      }
     });
 
     // Sum all completed credits (no duplicates)
     const completedFromCourses = Array.from(completedCourses.values()).reduce((sum, credits) => sum + credits, 0);
-    
-    // Transferred credits from profile (separate from course-based credits)
-    const transferredCredits = userProfile?.completed_credit_hours || 0;
+
+    // Sum transferred credits from course entries
+    const transferredFromCourses = Array.from(transferredCourses.values()).reduce((sum, credits) => sum + credits, 0);
+
+    // If the user added explicit transferred courses in planner, prefer that total
+    // to avoid double-counting with the profile's `completed_credit_hours` field.
+    const profileTransferred = Number(userProfile?.completed_credit_hours || 0);
+    const transferredCredits = transferredFromCourses > 0 ? transferredFromCourses : profileTransferred;
 
     // In progress courses
     const inProgressCourses = new Map();
@@ -266,13 +287,14 @@ export default function DegreePlanner() {
 
     const totalInProgress = Array.from(inProgressCourses.values()).reduce((sum, credits) => sum + credits, 0);
     
-    const totalCompleted = transferredCredits + completedFromCourses;
-    const remaining = Math.max(0, totalRequired - totalCompleted - totalInProgress);
-    const percentage = Math.min((totalCompleted / totalRequired) * 100, 100);
+    const combinedCompleted = transferredCredits + completedFromCourses;
+    const remaining = Math.max(0, totalRequired - combinedCompleted - totalInProgress);
+    const percentage = Math.min((combinedCompleted / totalRequired) * 100, 100);
 
     return {
-      totalCompleted,
+      completedCredits: completedFromCourses,
       transferredCredits,
+      combinedCompleted,
       inProgressCredits: totalInProgress,
       remaining,
       totalRequired,
@@ -437,7 +459,7 @@ const handleConfirmDeleteSemester = async () => {
         <h2>Degree Progress</h2>
         <div className="summary-cards">
           <div className="summary-card">
-            <span className="summary-value">{progress.totalCompleted}</span>
+            <span className="summary-value">{progress.completedCredits}</span>
             <span className="summary-label">Completed</span>
           </div>
           <div className="summary-card green">
@@ -453,8 +475,8 @@ const handleConfirmDeleteSemester = async () => {
             <span className="summary-label">Remaining</span>
           </div>
         </div>
-        <div className="progress-section">
-          <span className="progress-label">Overall: {progress.totalCompleted}/{progress.totalRequired}</span>
+          <div className="progress-section">
+          <span className="progress-label">Overall: {progress.combinedCompleted}/{progress.totalRequired}</span>
           <div className="progress-bar-container">
             <div className="progress-bar-fill" style={{ width: `${progress.percentage}%` }}></div>
           </div>

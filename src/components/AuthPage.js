@@ -153,11 +153,11 @@ export default function AuthPage() {
       {showConfetti && <Confetti />}
       <div className="auth-box">
         <div className={`auth-inner ${isLogin ? "" : "flip"}`}>
-          {/* Login Side */}
+          
           <div className="auth-front">
             <h1 className="title">Login</h1>
             
-            {/* Google Sign-In Button */}
+            
             <button 
               type="button" 
               className="google-btn"
@@ -246,11 +246,11 @@ export default function AuthPage() {
               </p>
           </div>
 
-          {/* SignUp Side */}
+          
           <div className="auth-back">
             <h1 className="title">Sign Up</h1>
             
-            {/* Google Sign-In Button */}
+            
             <button 
               type="button" 
               className="google-btn"

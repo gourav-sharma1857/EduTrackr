@@ -116,7 +116,7 @@ const handleDeleteCareerItem = async () => {
 
   const triggerConfetti = () => {
   setShowConfetti(true);
-  setTimeout(() => setShowConfetti(false), 5000); // Stop after 5 seconds
+  setTimeout(() => setShowConfetti(false), 5000);
 };
 
 const handleStatusChange = async (appId, newStatus) => {

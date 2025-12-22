@@ -18,7 +18,6 @@ import DegreePlanner from "./components/DegreePlanner";
 import "./App.css";
 import HomePage from "./components/HomePage";
 
-// Protected Route Wrapper
 function ProtectedLayout({ title, children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -80,13 +79,12 @@ function App() {
 
   return (
     <Routes>
-      {/* Public Auth Route */}
+      
       <Route
         path="/auth"
         element={user ? <Navigate to="/" replace /> : <AuthPage />}
       />
 
-      {/* Protected Routes */}
       <Route
         path="/"
         element={
@@ -195,7 +193,6 @@ function App() {
         }
       />
 
-      {/* Catch all - redirect to dashboard */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

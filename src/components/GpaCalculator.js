@@ -9,6 +9,7 @@ export default function GpaCalculator() {
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [classes, setClasses] = useState([]);
+  const [allCompletedCourses, setAllCompletedCourses] = useState([]);
   const [completedAssignments, setCompletedAssignments] = useState([]);
   const [categoryWeights, setCategoryWeights] = useState({});
 
@@ -34,6 +35,19 @@ export default function GpaCalculator() {
     const q = query(collection(db, "classes"), where("uid", "==", user.uid), where("is_active", "==", true));
     const unsub = onSnapshot(q, (snapshot) => {
       setClasses(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsub();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const q = query(
+      collection(db, "classes"), 
+      where("uid", "==", user.uid), 
+      where("is_completed", "==", true) 
+    );
+    const unsub = onSnapshot(q, (snapshot) => {
+      setAllCompletedCourses(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
     });
     return () => unsub();
   }, [user]);
@@ -119,33 +133,73 @@ export default function GpaCalculator() {
 
     classes.forEach(cls => {
       const grade = calculateClassGrade(cls.id);
-      if (grade && cls.credit_hours) {
+      if (grade && cls.credit_hours && !cls.is_transfer) {
         totalPoints += grade.letterGrade.gpa * cls.credit_hours;
         totalCredits += cls.credit_hours;
       }
     });
-
     return totalCredits > 0 ? (totalPoints / totalCredits) : 0;
   };
 
   const calculateCumulativeGPA = () => {
-    const semesterGPA = calculateSemesterGPA();
-    const currentGPA = userProfile?.current_gpa || 0;
-    const completedCredits = userProfile?.completed_credit_hours || 0;
-    const currentCredits = classes.reduce((sum, cls) => sum + (cls.credit_hours || 0), 0);
+    
+    let calculatedPoints = 0;
+    let calculatedCredits = 0;
 
-    if (completedCredits === 0 && currentCredits === 0) return 0;
-    if (completedCredits === 0) return semesterGPA;
+    allCompletedCourses.forEach(course => {
+      if (!course.is_transfer) {
+        const gpaValue = typeof course.final_gpa === 'number'
+          ? course.final_gpa
+          : (typeof course.grade === 'number' ? getLetterGrade(course.grade).gpa : null);
+        if (gpaValue != null) {
+          calculatedPoints += gpaValue * (course.credit_hours || 0);
+          calculatedCredits += (course.credit_hours || 0);
+        }
+      }
+    });
 
-    const totalPoints = (currentGPA * completedCredits) + (semesterGPA * currentCredits);
-    const totalCredits = completedCredits + currentCredits;
+    classes.forEach(cls => {
+      const grade = calculateClassGrade(cls.id);
+      if (grade && !cls.is_transfer) {
+        calculatedPoints += (grade.letterGrade.gpa * (cls.credit_hours || 0));
+        calculatedCredits += (cls.credit_hours || 0);
+      }
+    });
 
-    return totalCredits > 0 ? (totalPoints / totalCredits) : 0;
+    
+    
+    const priorGpa = userProfile?.current_gpa ?? null;
+    const priorCredits = Number(userProfile?.completed_credit_hours || 0);
+    
+    
+    // If user provided prior GPA and there are no calculated credits,
+    // return the profile GPA directly (user expects that to take precedence).
+    if (priorGpa != null && calculatedCredits === 0) {
+      return priorGpa;
+    }
+
+    if (priorGpa != null && priorCredits > 0) {
+      const priorPoints = priorGpa * priorCredits;
+      const totalPoints = priorPoints + calculatedPoints;
+      const totalCredits = priorCredits + calculatedCredits;
+      return totalCredits > 0 ? (totalPoints / totalCredits) : priorGpa;
+    }
+
+    
+    // Fallback: calculate from available app data only
+    return calculatedCredits > 0 ? (calculatedPoints / calculatedCredits) : (priorGpa != null ? priorGpa : 0);
+  };
+
+  const calculateTotalCredits = () => {
+    const completed = allCompletedCourses.reduce((sum, c) => sum + (c.credit_hours || 0), 0);
+    const current = classes.reduce((sum, c) => sum + (c.credit_hours || 0), 0);
+    return completed + current;
   };
 
   const semesterGPA = calculateSemesterGPA();
   const cumulativeGPA = calculateCumulativeGPA();
-  const totalCredits = (userProfile?.completed_credit_hours || 0) + classes.reduce((sum, cls) => sum + (cls.credit_hours || 0), 0);
+  const totalCredits = allCompletedCourses.reduce((sum, cls) => sum + (Number(cls.credit_hours) || 0), 0) + 
+                     classes.reduce((sum, cls) => sum + (Number(cls.credit_hours) || 0), 0);
 
   if (!user) {
     return <div className="empty-state">Please sign in to view GPA calculator</div>;
@@ -158,7 +212,7 @@ export default function GpaCalculator() {
         <p>Track your academic performance (UTD 4.0 Scale)</p>
       </div>
 
-      {/* GPA Summary Cards */}
+      
       <div className="gpa-summary">
         <div className="gpa-card main">
           <div className="gpa-card-content">
@@ -189,7 +243,7 @@ export default function GpaCalculator() {
         </div>
       </div>
 
-      {/* GPA Scale Reference */}
+      
       <div className="gpa-scale">
         <h3>UTD GPA Scale</h3>
         <div className="scale-grid">

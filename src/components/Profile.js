@@ -104,7 +104,7 @@ const handleRemoveCustomLink = (index) => {
       </div>
 
       <div className="profile-cards">
-        {/* Personal Information */}
+        
         <div className="profile-card">
           <div className="card-header">
             <h2>👤 Personal Information</h2>
@@ -170,7 +170,7 @@ const handleRemoveCustomLink = (index) => {
           </div>
         </div>
 
-        {/* Academic Settings */}
+        
         <div className="profile-card">
           <div className="card-header">
             <h2>🎓 Academic Settings</h2>
@@ -221,7 +221,7 @@ const handleRemoveCustomLink = (index) => {
           </div>
         </div>
 
-        {/* Professional Links */}
+        
         <div className="profile-card">
           <div className="card-header">
             <h2>🔗 Professional Links</h2>
@@ -308,10 +308,10 @@ const handleRemoveCustomLink = (index) => {
 
             {!isEditing && (formData.linkedin_url || formData.github_url || formData.handshake_url || formData.portfolio_url) && (
               <div className="quick-links">
-                {formData.linkedin_url && <a href__={formData.linkedin_url} target="_blank" rel="noopener noreferrer" className="link-btn">🔗 LinkedIn</a>}
-                {formData.github_url && <a href__={formData.github_url} target="_blank" rel="noopener noreferrer" className="link-btn">💻 GitHub</a>}
-                {formData.handshake_url && <a href__={formData.handshake_url} target="_blank" rel="noopener noreferrer" className="link-btn">🤝 Handshake</a>}
-                {formData.portfolio_url && <a href__={formData.portfolio_url} target="_blank" rel="noopener noreferrer" className="link-btn">🌐 Portfolio</a>}
+                {formData.linkedin_url && <a href={formData.linkedin_url} target="_blank" rel="noopener noreferrer" className="link-btn">🔗 LinkedIn</a>}
+                {formData.github_url && <a href={formData.github_url} target="_blank" rel="noopener noreferrer" className="link-btn">💻 GitHub</a>}
+                {formData.handshake_url && <a href={formData.handshake_url} target="_blank" rel="noopener noreferrer" className="link-btn">🤝 Handshake</a>}
+                {formData.portfolio_url && <a href={formData.portfolio_url} target="_blank" rel="noopener noreferrer" className="link-btn">🌐 Portfolio</a>}
               </div>
             )}
           </div>

@@ -117,12 +117,10 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Mobile backdrop */}
       {!collapsed && (
         <div className="mobile-backdrop" onClick={() => setCollapsed(true)} />
       )}
-
-      {/* Mobile menu button */}
+      
       <button
         className={`mobile-menu-btn ${collapsed ? "visible" : ""}`}
         onClick={() => setCollapsed(false)}
