@@ -122,7 +122,6 @@ Copy code
 
 ### Installation
 
-```bash
 git clone https://github.com/gourav-sharma1857/EduTrackr.git
 cd EduTrackr
 npm install
