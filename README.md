@@ -116,38 +116,64 @@ Copy code
 
 ### Requirements
 
-- Node.js version 14 or higher
-- npm
-- Firebase project with Authentication and Firestore enabled
+Prerequisites:
+- Node.js (>= 14) and npm
 
-### Installation
+Install and run locally:
 
-git clone https://github.com/gourav-sharma1857/EduTrackr.git
-cd EduTrackr
+```powershell
+cd dashboard
 npm install
-Environment Variables
-Create a .env file in the project root:
+npm start
+```
 
-env
-Copy code
+Open `http://localhost:3000` (or the port shown) in your browser.
+
+## Firebase Configuration
+
+This app expects environment variables to be set in a `.env` file placed in the main directory. Create a `.env` with the following keys (replace values with your Firebase project's values):
+
+```env
 REACT_APP_FIREBASE_API_KEY=your_api_key
 REACT_APP_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
 REACT_APP_FIREBASE_PROJECT_ID=your_project_id
 REACT_APP_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
-REACT_APP_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
+REACT_APP_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 REACT_APP_FIREBASE_APP_ID=your_app_id
-REACT_APP_FIREBASE_MEASUREMENT_ID=your_measurement_id
-Firebase Setup
-Firebase Console
+```
 
-Authentication
+Important:
+- After creating/updating `.env`, restart the dev server (`npm start`) so CRA picks up the changes.
+- In Firebase Console enable **Authentication -> Sign-in method -> Google** and **Firestore** (in test or appropriate rules for development).
 
-Sign-in Method
+## File Overview
 
-Enable Google and Email and Password providers
+## Deploying to GitHub Pages
 
-Run Locally
-bash
-Copy code
-npm start
-Open http://localhost:3000. HashRouter is used for routing.
+This project can be published to GitHub Pages using the `gh-pages` package. The repository owner is `gourav-sharma1857` and the repo is `EduTrackr`, so the app will be available at:
+
+```
+https://gourav-sharma1857.github.io/EduTrackr
+```
+
+Steps to publish:
+
+1. Ensure the `homepage` field in `dashboard/package.json` is set to the URL above (already configured).
+2. Install the deploy tool (local dev dependency):
+
+```powershell
+cd dashboard
+npm install --save-dev gh-pages
+```
+
+3. Build and deploy:
+
+```powershell
+cd dashboard
+npm run deploy
+```
+
+Notes:
+- The `deploy` script runs `npm run build` and then publishes the `build` folder to a `gh-pages` branch.
+- If you host from a custom domain or username page, adjust the `homepage` field accordingly.
+
