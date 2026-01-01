@@ -193,42 +193,50 @@ export default function HomePage() {
     percentage: totalRequired > 0 ? Math.min((totalCompleted / totalRequired) * 100, 100) : 0
   };
 };
+const getGradePoints = (percentage) => {
+    if (percentage >= 93) return 4.0;
+    if (percentage >= 90) return 3.67;
+    if (percentage >= 87) return 3.33;
+    if (percentage >= 83) return 3.0;
+    if (percentage >= 80) return 2.67;
+    if (percentage >= 77) return 2.33;
+    if (percentage >= 73) return 2.0;
+    if (percentage >= 70) return 1.67;
+    if (percentage >= 67) return 1.33;
+    if (percentage >= 63) return 1.0;
+    if (percentage >= 60) return 0.67;
+    return 0.0;
+  };
 
     const calculateGPA = () => {
-    if (gradedAssignments.length === 0 || classes.length === 0) return { gpa: 0, hasData: false };
-    
-    const getGradePoints = (percentage) => {
-      if (percentage >= 93) return 4.0;
-      if (percentage >= 90) return 3.67;
-      if (percentage >= 87) return 3.33;
-      if (percentage >= 83) return 3.0;
-      if (percentage >= 80) return 2.67;
-      if (percentage >= 77) return 2.33;
-      if (percentage >= 73) return 2.0;
-      if (percentage >= 70) return 1.67;
-      if (percentage >= 67) return 1.33;
-      if (percentage >= 63) return 1.0;
-      if (percentage >= 60) return 0.67;
-      return 0.0;
-    };
+    const priorGpa = Number(userProfile?.current_gpa) || 0;
+    const priorCredits = Number(userProfile?.completed_credit_hours) || 0;
 
-    let totalPoints = 0;
-    let totalCredits = 0;
+    let currentPoints = 0;
+    let currentCredits = 0;
 
     classes.forEach(cls => {
       const classAssignments = gradedAssignments.filter(a => a.class_id === cls.id);
       if (classAssignments.length > 0 && cls.credit_hours) {
         const totalPts = classAssignments.reduce((sum, a) => sum + (a.total_points || 0), 0);
         const earnedPts = classAssignments.reduce((sum, a) => sum + (a.earned_points || 0), 0);
+        
         if (totalPts > 0) {
           const percentage = (earnedPts / totalPts) * 100;
-          totalPoints += getGradePoints(percentage) * cls.credit_hours;
-          totalCredits += cls.credit_hours;
+          const gpaValue = getGradePoints(percentage);
+          currentPoints += gpaValue * Number(cls.credit_hours);
+          currentCredits += Number(cls.credit_hours);
         }
       }
     });
 
-    return { gpa: totalCredits > 0 ? (totalPoints / totalCredits).toFixed(2) : 0, hasData: totalCredits > 0 };
+    const totalPoints = (priorGpa * priorCredits) + currentPoints;
+    const totalCredits = priorCredits + currentCredits;
+
+    if (totalCredits === 0) return { gpa: priorGpa > 0 ? priorGpa.toFixed(2) : 0, hasData: priorGpa > 0 };
+    
+    const finalGpa = totalPoints / totalCredits;
+    return { gpa: finalGpa.toFixed(2), hasData: true };
   };
 
   const degreeProgress = calculateDegreeProgress();
