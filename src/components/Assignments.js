@@ -21,7 +21,9 @@ export default function Assignments() {
     due_date: "",
     total_points: 100,
     is_completed: false,
-    is_graded: false
+    is_graded: false,
+    is_recurring: false,
+    recurrence_end_date: ""
   });
 
   const categoryOptions = ["Homework", "Quiz", "Test", "Project", "Lab", "Essay", "Other"];
@@ -58,21 +60,53 @@ export default function Assignments() {
       due_date: "",
       total_points: 100,
       is_completed: false,
-      is_graded: false
+      is_graded: false,
+      is_recurring: false,
+      recurrence_end_date: ""
     });
     setEditingAssignment(null);
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
+  
+  try {
     if (editingAssignment) {
       await updateDoc(doc(db, "assignments", editingAssignment.id), formData);
     } else {
-      await addDoc(collection(db, "assignments"), { ...formData, uid: user.uid });
+      if (formData.is_recurring && formData.recurrence_end_date) {
+        const start = new Date(formData.due_date);
+        const end = new Date(formData.recurrence_end_date);
+        const batchPromises = [];
+
+        let currentDue = new Date(start);
+        let count = 1;
+
+        while (currentDue <= end) {
+          const numberedTitle = `${formData.title} ${count}`;
+
+          batchPromises.push(addDoc(collection(db, "assignments"), {
+            ...formData,
+            title: numberedTitle, // <--- This must be the variable, not the form state
+            due_date: currentDue.toISOString().slice(0, 16),
+            uid: user.uid,
+            is_recurring: false 
+          }));
+
+          currentDue.setDate(currentDue.getDate() + 7);
+          count++;
+        }
+        await Promise.all(batchPromises);
+      } else {
+        await addDoc(collection(db, "assignments"), { ...formData, uid: user.uid });
+      }
     }
     setIsDialogOpen(false);
     resetForm();
-  };
+  } catch (err) {
+    console.error("Error saving assignment:", err);
+  }
+};
 
   const handleEdit = (assignment) => {
     setEditingAssignment(assignment);
@@ -303,6 +337,28 @@ export default function Assignments() {
                   required
                 />
               </div>
+              <div className="form-group checkbox-group">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_recurring}
+                    onChange={(e) => setFormData({ ...formData, is_recurring: e.target.checked })}
+                  />
+                  Repeat Weekly
+                </label>
+              </div>
+
+            {formData.is_recurring && (
+              <div className="form-group animate-fade-in">
+                <label>Repeat Until *</label>
+                <input
+                  type="date"
+                  value={formData.recurrence_end_date}
+                  onChange={(e) => setFormData({ ...formData, recurrence_end_date: e.target.value })}
+                  required={formData.is_recurring}
+                />
+                <p className="helper-text">This will create an assignment every week until this date.</p>
+              </div>)}
 
               <div className="form-actions">
                 <button type="button" className="btn-secondary" onClick={() => setIsDialogOpen(false)}>Cancel</button>

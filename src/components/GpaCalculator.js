@@ -172,8 +172,6 @@ export default function GpaCalculator() {
     const priorCredits = Number(userProfile?.completed_credit_hours || 0);
     
     
-    // If user provided prior GPA and there are no calculated credits,
-    // return the profile GPA directly (user expects that to take precedence).
     if (priorGpa != null && calculatedCredits === 0) {
       return priorGpa;
     }
@@ -186,7 +184,6 @@ export default function GpaCalculator() {
     }
 
     
-    // Fallback: calculate from available app data only
     return calculatedCredits > 0 ? (calculatedPoints / calculatedCredits) : (priorGpa != null ? priorGpa : 0);
   };
 
