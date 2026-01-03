@@ -71,6 +71,7 @@ Copy code
 - User and class-filtered assignments
 - Completion and grading tracking
 - Integrated with grade data
+- Repeated assignments: Allows for the creation of recurring tasks, such as weekly reflections or daily practice logs, without manual duplication.
 
 ### Grade Tracker
 - Class-based grade aggregation
