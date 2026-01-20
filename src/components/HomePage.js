@@ -242,6 +242,17 @@ const getGradePoints = (percentage) => {
   const degreeProgress = calculateDegreeProgress();
   const gpaData = calculateGPA();
 
+  const timeToMinutes = (time) => {
+  const [hours, minutes] = time.split(":").map(Number);
+  return hours * 60 + minutes;
+};
+
+const sortedTodayClasses = todayClasses
+  .slice()
+  .sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time));
+
+
+
   const getUserName = () => {
     if (userProfile?.full_name) return userProfile.full_name.split(' ')[0];
     if (user?.displayName) return user.displayName.split(' ')[0];
@@ -306,19 +317,25 @@ const getGradePoints = (percentage) => {
           <div className="preview-content">
             {todayClasses.length > 0 ? (
               <div className="schedule-list">
-                {todayClasses.slice(0, 3).map(cls => (
-                  <div key={cls.id} className="schedule-item">
-                    <div className="schedule-color" style={{ backgroundColor: cls.color || '#3b82f6' }}></div>
-                    <div className="schedule-info">
-                      <span className="schedule-code">{cls.course_code}</span>
-                      <span className="schedule-name">{cls.course_name}</span>
-                    </div>
-                    <div className="schedule-time">
-                      <span>{cls.start_time}</span>
-                      <span className="schedule-room">{cls.room_number}</span>
-                    </div>
+               {sortedTodayClasses.slice(0, 3).map(cls => (
+                <div key={cls.id} className="schedule-item">
+                  <div
+                    className="schedule-color"
+                    style={{ backgroundColor: cls.color || '#3b82f6' }}
+                  ></div>
+
+                  <div className="schedule-info">
+                    <span className="schedule-code">{cls.course_code}</span>
+                    <span className="schedule-name">{cls.course_name}</span>
                   </div>
-                ))}
+
+                  <div className="schedule-time">
+                    <span>{cls.start_time}</span>
+                    <span className="schedule-room">{cls.room_number}</span>
+                  </div>
+                </div>
+              ))}
+
               </div>
             ) : (
               <div className="preview-empty-state">
