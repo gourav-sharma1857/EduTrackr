@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { db, auth } from "../firebase.js";
 import { onAuthStateChanged } from "firebase/auth";
+import { writeBatch } from "firebase/firestore"
 import "../styles/Assignments.css";
 
 export default function Assignments() {
@@ -13,6 +14,7 @@ export default function Assignments() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState(null);
   const [filter, setFilter] = useState("pending");
+  const [selectedIds, setSelectedIds] = useState([]);
   const [formData, setFormData] = useState({
     class_id: "",
     title: "",
@@ -25,6 +27,38 @@ export default function Assignments() {
     is_recurring: false,
     recurrence_end_date: ""
   });
+
+  const toggleSelectAssignment = (id) => {
+  setSelectedIds(prev => 
+    prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+  );
+};
+
+  const handleSelectAll = () => {
+    if (selectedIds.length === filteredAssignments.length) {
+      setSelectedIds([]); // Deselect all
+    } else {
+      setSelectedIds(filteredAssignments.map(a => a.id)); // Select all current
+    }
+  };
+
+  const handleBulkDelete = async () => {
+  if (selectedIds.length === 0) return;
+  
+  const batch = writeBatch(db);
+  selectedIds.forEach((id) => {
+    const docRef = doc(db, "assignments", id);
+    batch.delete(docRef);
+  });
+
+  try {
+    await batch.commit();
+    setSelectedIds([]); 
+    setShowDeleteDialog(false);
+  } catch (err) {
+    console.error("Bulk delete failed:", err);
+  }
+};
 
   const categoryOptions = ["Homework", "Quiz", "Test", "Project", "Lab", "Essay", "Other"];
 
@@ -87,9 +121,8 @@ export default function Assignments() {
 
           batchPromises.push(addDoc(collection(db, "assignments"), {
             ...formData,
-            title: numberedTitle, // <--- This must be the variable, not the form state
-            due_date: currentDue.toISOString().slice(0, 16),
-            uid: user.uid,
+            title: numberedTitle, 
+            due_date: new Date(currentDue.getTime() - (currentDue.getTimezoneOffset() * 60000)).toISOString().slice(0, 16),            uid: user.uid,
             is_recurring: false 
           }));
 
@@ -115,34 +148,58 @@ export default function Assignments() {
   };
 
   const handleDeleteAssignment = async () => {
-    if (!assignmentToDelete) return;
-    try {
-      await deleteDoc(doc(db, "assignments", assignmentToDelete.id));
-      setShowDeleteDialog(false)
-      setAssignmentToDelete(null); 
+  try {
+    const batch = writeBatch(db); 
 
-    } catch (err) {
-      console.error("Error deleting assignment:", err);
-      alert("Failed to delete assignment: " + err.message);
+    if (selectedIds.length > 0) {
+      selectedIds.forEach((id) => {
+        batch.delete(doc(db, "assignments", id));
+      });
+      await batch.commit();
+    } else if (assignmentToDelete) {
+      await deleteDoc(doc(db, "assignments", assignmentToDelete.id));
     }
 
-  };
+    setShowDeleteDialog(false);
+    setAssignmentToDelete(null);
+    setSelectedIds([]); 
+  } catch (err) {
+    console.error("Error deleting:", err);
+    alert("Failed to delete: " + err.message);
+  }
+};
 
   const handleToggleComplete = async (assignment) => {
     await updateDoc(doc(db, "assignments", assignment.id), { is_completed: !assignment.is_completed });
   };
 
   const isOverdue = (date) => new Date(date) < new Date() && !isToday(date);
-  const isToday = (date) => new Date(date).toDateString() === new Date().toDateString();
-  const isTomorrow = (date) => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return new Date(date).toDateString() === tomorrow.toDateString();
-  };
+  const isToday = (dateString) => {
+  const d = new Date(dateString);
+  const today = new Date();
+  return d.getDate() === today.getDate() &&
+         d.getMonth() === today.getMonth() &&
+         d.getFullYear() === today.getFullYear();
+};
 
-  const formatDate = (date) => {
-    return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-  };
+const isTomorrow = (dateString) => {
+  const d = new Date(dateString);
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return d.getDate() === tomorrow.getDate() &&
+         d.getMonth() === tomorrow.getMonth() &&
+         d.getFullYear() === tomorrow.getFullYear();
+};
+
+  const formatDate = (dateString) => {
+  const date = new Date(dateString); 
+  return date.toLocaleDateString("en-US", { 
+    month: "short", 
+    day: "numeric", 
+    hour: "numeric", 
+    minute: "2-digit" 
+  });
+};
 
   const filteredAssignments = assignments.filter(a => {
     if (filter === "pending") return !a.is_completed;
@@ -206,12 +263,13 @@ export default function Assignments() {
               <div className="class-assignments">
                 {classAssignments.map(assignment => (
                   <div key={assignment.id} className={`assignment-card ${assignment.is_completed ? "completed" : ""}`}>
-                    <div className="assignment-checkbox">
+              
+                    <div className="assignment-selection">
                       <input
-                      title="Mark as done"
                         type="checkbox"
-                        checked={assignment.is_completed}
-                        onChange={() => handleToggleComplete(assignment)}
+                        title="Select"
+                        checked={selectedIds.includes(assignment.id)}
+                        onChange={() => toggleSelectAssignment(assignment.id)}
                       />
                     </div>
                     <div className="assignment-info">
@@ -232,6 +290,14 @@ export default function Assignments() {
                     <div className="assignment-actions">
                       <button title="Edit" className="btn-icon" onClick={() => handleEdit(assignment)}>✏️</button>
                       <button title="Delete" className="btn-icon" onClick={() => { setAssignmentToDelete(assignment); setShowDeleteDialog(true); }}>🗑️</button>
+                    </div>
+                    <div className="assignment-checkbox">
+                      <input
+                      title="Mark as done"
+                        type="checkbox"
+                        checked={assignment.is_completed}
+                        onChange={() => handleToggleComplete(assignment)}
+                      />
                     </div>
                   </div>
                 ))}
@@ -270,6 +336,20 @@ export default function Assignments() {
         </div>
       </div>
     )}
+
+      <div className={`bulk-floating-bar ${selectedIds.length > 0 ? 'active' : ''}`}>
+        <div className="bar-content">
+          <span className="count-badge">{selectedIds.length} Selected</span>
+          <div className="bar-actions">
+            <button className="btn-secondary-light" onClick={() => setSelectedIds([])}>
+              Deselect
+            </button>
+            <button className="btn-danger-bright" onClick={() => setShowDeleteDialog(true)}>
+              🗑️ Delete Permanently
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Add/Edit Modal */}
       {isDialogOpen && (

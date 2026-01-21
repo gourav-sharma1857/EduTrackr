@@ -147,11 +147,56 @@
   opacity: 0.6;
 }
 
+/* Container for the status action */
+.assignment-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Target the checkbox itself to look like a pill button */
 .assignment-checkbox input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
+  appearance: none; /* Removes the default box */
+  -webkit-appearance: none;
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 8px 16px;
+  border-radius: 8px;
   cursor: pointer;
-  accent-color: #10b981;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  position: relative;
+  min-width: 110px;
+}
+
+.assignment-checkbox input[type="checkbox"]::after {
+  content: "Mark Done";
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.assignment-checkbox input[type="checkbox"]:hover {
+  background-color: #92f89c;
+  border-color: #cbd5e1;
+}
+
+.assignment-checkbox input[type="checkbox"]:checked {
+  background-color: #ecfdf5;
+  border-color: #a7f3d0;
+  accent-color: transparent; 
+}
+
+.assignment-checkbox input[type="checkbox"]:checked::after {
+  content: "✓ Completed";
+  color: #059669;
+}
+
+.assignment-checkbox input[type="checkbox"]:checked:hover {
+  background-color: #d1fae5;
+  border-color: #6ee7b7;
 }
 
 .assignment-info {
@@ -415,3 +460,69 @@
   from { opacity: 0; transform: translateY(-5px); }
   to { opacity: 1; transform: translateY(0); }
 } 
+
+/* Floating Bar Container */
+.bulk-floating-bar {
+  position: fixed;
+  bottom: -100px; /* Hidden by default */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 500px;
+  background: rgba(30, 41, 59, 0.9); /* Dark slate with transparency */
+  backdrop-filter: blur(10px);
+  padding: 1rem 1.5rem;
+  border-radius: 100px; /* Pill shape */
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  transition: bottom 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  z-index: 1000;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.bulk-floating-bar.active {
+  bottom: 30px; /* Slide up into view */
+}
+
+.bar-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.count-badge {
+  color: white;
+  font-weight: 600;
+  background: #3b82f6;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+}
+
+.bar-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.btn-danger-bright {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 50px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.btn-danger-bright:hover {
+  background: #dc2626;
+}
+
+.btn-secondary-light {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 50px;
+  cursor: pointer;
+}
