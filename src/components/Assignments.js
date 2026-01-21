@@ -207,14 +207,25 @@ const isTomorrow = (dateString) => {
     return true;
   }).sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
 
-  const groupedByClass = {};
-  filteredAssignments.forEach(assignment => {
-    const cls = classes.find(c => c.id === assignment.class_id);
-    const classKey = cls?.id || "unknown";
-    if (!groupedByClass[classKey]) {
-      groupedByClass[classKey] = { class: cls, assignments: [] };
+  const groupedData = {};
+
+  filteredAssignments.forEach((assignment) => {
+    const cls = classes.find((c) => c.id === assignment.class_id);
+    const classId = cls?.id || "unknown";
+    const categoryName = assignment.category || "Other";
+
+    if (!groupedData[classId]) {
+      groupedData[classId] = {
+        classInfo: cls,
+        categories: {}
+      };
     }
-    groupedByClass[classKey].assignments.push(assignment);
+
+    if (!groupedData[classId].categories[categoryName]) {
+      groupedData[classId].categories[categoryName] = [];
+    }
+
+    groupedData[classId].categories[categoryName].push(assignment);
   });
 
   if (!user) {
@@ -247,65 +258,80 @@ const isTomorrow = (dateString) => {
       </div>
 
       {/* Assignments List */}
-      {Object.keys(groupedByClass).length === 0 ? (
-        <div className="empty-card">
-          {filter === "pending" ? "No pending assignments! 🎉" : "No assignments found"}
-        </div>
-      ) : (
-        <div className="assignments-list">
-          {Object.values(groupedByClass).map(({ class: cls, assignments: classAssignments }) => (
-            <div key={cls?.id || "unknown"} className="class-group">
-              <div className="class-group-header" style={{ borderLeftColor: cls?.color || "#64748b" }}>
-                <h3>{cls?.course_code || "Unknown Class"}</h3>
-                <span className="class-name">{cls?.course_name}</span>
-                <span className="assignment-count">{classAssignments.length} assignments</span>
-              </div>
-              <div className="class-assignments">
-                {classAssignments.map(assignment => (
-                  <div key={assignment.id} className={`assignment-card ${assignment.is_completed ? "completed" : ""}`}>
-              
-                    <div className="assignment-selection">
-                      <input
-                        type="checkbox"
-                        title="Select"
-                        checked={selectedIds.includes(assignment.id)}
-                        onChange={() => toggleSelectAssignment(assignment.id)}
-                      />
-                    </div>
-                    <div className="assignment-info">
-                      <div className="assignment-header">
-                        <h4 className={assignment.is_completed ? "strikethrough" : ""}>{assignment.title}</h4>
-                        <span className="category-badge">{assignment.category}</span>
-                      </div>
-                      {assignment.description && <p className="assignment-desc">{assignment.description}</p>}
-                      <div className="assignment-meta">
-                        <span className="points">{assignment.total_points} pts</span>
-                        <span className={`due-date ${isOverdue(assignment.due_date) && !assignment.is_completed ? "overdue" : isToday(assignment.due_date) ? "today" : ""}`}>
-                          {isOverdue(assignment.due_date) && !assignment.is_completed ? "⚠️ Overdue" : 
-                           isToday(assignment.due_date) ? "📌 Due Today" : 
-                           isTomorrow(assignment.due_date) ? "📅 Tomorrow" : formatDate(assignment.due_date)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="assignment-actions">
-                      <button title="Edit" className="btn-icon" onClick={() => handleEdit(assignment)}>✏️</button>
-                      <button title="Delete" className="btn-icon" onClick={() => { setAssignmentToDelete(assignment); setShowDeleteDialog(true); }}>🗑️</button>
-                    </div>
-                    <div className="assignment-checkbox">
-                      <input
-                      title="Mark as done"
-                        type="checkbox"
-                        checked={assignment.is_completed}
-                        onChange={() => handleToggleComplete(assignment)}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
+     {Object.keys(groupedData).length === 0 ? (
+  <div className="empty-card">
+    {filter === "pending" ? "No pending assignments! 🎉" : "No assignments found"}
+  </div>
+) : (
+      <div className="assignments-list">
+        {Object.values(groupedData).map(({ classInfo, categories }) => (
+          <div key={classInfo?.id || "unknown"} className="class-group">
+            {/* Level 1: Class Header */}
+            <div className="class-group-header" style={{ borderLeftColor: classInfo?.color || "#64748b" }}>
+              <h3>{classInfo?.course_code || "Unknown Class"}</h3>
+              <span className="class-name">{classInfo?.course_name}</span>
+              <span className="assignment-count">
+                {Object.values(categories).flat().length} Total
+              </span>
             </div>
-          ))}
-        </div>
-      )}
+
+            <div className="class-content" style={{ paddingLeft: '1rem', marginTop: '0.5rem' }}>
+              {/* Level 2: Category Dropdowns */}
+              {Object.keys(categories).sort().map((catName) => (
+                <details key={catName} className="category-dropdown" open style={{ marginBottom: '0.5rem', border: '1px solid rgba(30, 41, 59, 0.9)', borderRadius: '8px', overflow: 'hidden' }}>
+                  <summary style={{ padding: '0.75rem', background: 'rgba(30, 41, 59, 0.9)', cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: '600' }}>
+                    <span style={{ marginRight: '10px' }}>📁</span>
+                    {catName}
+                    <span style={{ marginLeft: 'auto', fontSize: '0.8rem', opacity: 0.6 }}>
+                      {categories[catName].length} items
+                    </span>
+                  </summary>
+
+                  <div className="category-items" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {categories[catName].map((assignment) => (
+                      <div key={assignment.id} className={`assignment-card ${assignment.is_completed ? "completed" : ""}`}>
+                        <div className="assignment-selection">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(assignment.id)}
+                            onChange={() => toggleSelectAssignment(assignment.id)}
+                          />
+                        </div>
+                        
+                        <div className="assignment-info">
+                          <div className="assignment-header">
+                            <h4 className={assignment.is_completed ? "strikethrough" : ""}>{assignment.title}</h4>
+                          </div>
+                          <div className="assignment-meta">
+                            <span className="points">{assignment.total_points} pts</span>
+                            <span className={`due-date ${isOverdue(assignment.due_date) && !assignment.is_completed ? "overdue" : ""}`}>
+                              {formatDate(assignment.due_date)}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="assignment-actions">
+                          <button title="Edit" className="btn-icon" onClick={() => handleEdit(assignment)}>✏️</button>
+                          <button title="Delete" className="btn-icon" onClick={() => { setAssignmentToDelete(assignment); setShowDeleteDialog(true); }}>🗑️</button>
+                        </div>
+
+                        <div className="assignment-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={assignment.is_completed}
+                            onChange={() => handleToggleComplete(assignment)}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
       {showDeleteDialog && (
       <div className="modal-overlay" onClick={() => setShowDeleteDialog(false)}>
         <div className="delete-dialog" onClick={(e) => e.stopPropagation()}>
