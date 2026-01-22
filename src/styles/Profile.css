@@ -236,6 +236,33 @@
 }
 
 .quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.link-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 16px;
+  background-color: #f1f5f9; /* Light slate */
+  color: #1e293b; /* Dark slate */
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  border: 1px solid #e2e8f0;
+}
+
+.link-btn:hover {
+  background-color: #e2e8f0;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.quick-links {
   cursor: pointer;
   display: flex;
   flex-wrap: wrap;

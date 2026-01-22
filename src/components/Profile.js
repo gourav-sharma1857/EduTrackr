@@ -306,12 +306,26 @@ const handleRemoveCustomLink = (index) => {
                 </div>
             </div>
 
-            {!isEditing && (formData.linkedin_url || formData.github_url || formData.handshake_url || formData.portfolio_url) && (
+            {!isEditing && (
               <div className="quick-links">
                 {formData.linkedin_url && <a href={formData.linkedin_url} target="_blank" rel="noopener noreferrer" className="link-btn">🔗 LinkedIn</a>}
                 {formData.github_url && <a href={formData.github_url} target="_blank" rel="noopener noreferrer" className="link-btn">💻 GitHub</a>}
                 {formData.handshake_url && <a href={formData.handshake_url} target="_blank" rel="noopener noreferrer" className="link-btn">🤝 Handshake</a>}
                 {formData.portfolio_url && <a href={formData.portfolio_url} target="_blank" rel="noopener noreferrer" className="link-btn">🌐 Portfolio</a>}
+                
+                {formData.custom_links.map((link, index) => (
+                  link.url && (
+                    <a 
+                      key={index} 
+                      href={link.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="link-btn"
+                    >
+                      🔗 {link.label || "Link"}
+                    </a>
+                  )
+                ))}
               </div>
             )}
           </div>

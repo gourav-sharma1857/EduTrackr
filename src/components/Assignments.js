@@ -60,7 +60,7 @@ export default function Assignments() {
   }
 };
 
-  const categoryOptions = ["Homework", "Quiz", "Test", "Project", "Lab", "Essay", "Other"];
+  const categoryOptions = ["Homework", "Quiz", "Test", "Project", "Lab", "Essay", "Exam" , "Midterm" , "Final" , "Other"];
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (currentUser) => setUser(currentUser));
@@ -278,7 +278,7 @@ const isTomorrow = (dateString) => {
             <div className="class-content" style={{ paddingLeft: '1rem', marginTop: '0.5rem' }}>
               {/* Level 2: Category Dropdowns */}
               {Object.keys(categories).sort().map((catName) => (
-                <details key={catName} className="category-dropdown" open style={{ marginBottom: '0.5rem', border: '1px solid rgba(30, 41, 59, 0.9)', borderRadius: '8px', overflow: 'hidden' }}>
+                <details key={catName} className="category-dropdown"  style={{ marginBottom: '0.5rem', border: '1px solid rgba(30, 41, 59, 0.9)', borderRadius: '8px', overflow: 'hidden' }}>
                   <summary style={{ padding: '0.75rem', background: 'rgba(30, 41, 59, 0.9)', cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: '600' }}>
                     <span style={{ marginRight: '10px' }}>📁</span>
                     {catName}
