@@ -661,3 +661,72 @@
     width: 100%;
   }
 }
+.export-pdf-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: #a1696d; 
+  color: #e11d48; 
+  border: 1px solid #fda4af;
+}
+
+.export-pdf-btn:hover {
+  background-color: #df6069;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(225, 29, 72, 0.1);
+}
+
+.export-pdf-btn:active {
+  transform: translateY(0);
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 1.5rem;
+  border-top: 1px solid #eee;
+  margin-top: auto;
+}
+
+/* Lock the background */
+body.modal-open {
+  overflow: hidden;
+}
+
+/* Ensure the overlay covers everything and centers the modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center; 
+  justify-content: center; 
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal-content {
+  background: white;
+  max-height: 90vh; 
+  width: 100%;
+  max-width: 600px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column; 
+  overflow: hidden; 
+}
+
+.modal-body {
+  overflow-y: auto; 
+  padding: 1.5rem;
+  flex-grow: 1;
+}

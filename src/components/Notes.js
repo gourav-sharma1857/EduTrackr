@@ -34,6 +34,32 @@ export default function Notes() {
   });
   const [tagInput, setTagInput] = useState("");
 
+  const handleExportPDF = (note) => {
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>${note.title}</title>
+        <style>
+          body { font-family: sans-serif; padding: 40px; line-height: 1.6; }
+          h1 { color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+          .date { color: #666; margin-bottom: 20px; }
+          .content { white-space: pre-wrap; font-size: 1.1rem; }
+          .tags { margin-top: 30px; color: #007bff; }
+        </style>
+      </head>
+      <body>
+        <h1>${note.title}</h1>
+        <div class="date">Lecture Date: ${note.lecture_date}</div>
+        <div class="content">${note.content}</div>
+        <div class="tags">${note.tags.map(t => '#' + t).join(' ')}</div>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.print();
+};
+
   // AUTH
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (currentUser) => {
@@ -41,6 +67,15 @@ export default function Notes() {
     });
     return () => unsub();
   }, []);
+    useEffect(() => {
+      if (viewingNote || isDialogOpen) {
+        document.body.classList.add("modal-open");
+      } else {
+        document.body.classList.remove("modal-open");
+      }
+      
+      return () => document.body.classList.remove("modal-open");
+    }, [viewingNote, isDialogOpen]);
 
   // Fetch classes
   useEffect(() => {
@@ -275,72 +310,71 @@ export default function Notes() {
               </div>
 
               <div className="notes-list">
-                {classNotes.map((note) => (
-                  <div className="notes-list">
   {classNotes.map((note) => (
     <div 
-          key={note.id} 
-          className="note-card"
-          onClick={() => setViewingNote(note)} 
-          style={{ cursor: 'pointer' }}
-        >
-          <div className="note-header">
-            <h3 className="note-title">{note.title}</h3>
-            <div className="note-actions" onClick={(e) => e.stopPropagation()}>
-              <button
-                className="action-btn edit-btn"
-                onClick={() => handleEdit(note)}
-                title="Edit"
-              >
-                ✎
-              </button>
-              <button
-                className="action-btn delete-btn"
-                onClick={() => {
-                  setNoteToDelete(note);
-                  setShowDeleteDialog(true);
-                }}
-                title="Delete"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-
-          {note.lecture_date && (
-            <div className="note-date">
-              {new Date(note.lecture_date).toLocaleDateString("en-US", {
-                month: "long",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </div>
-          )}
-
-          {/* Note content snippet */}
-          <div className="note-content" style={{
-            display: '-webkit-box',
-            WebkitLineClamp: '3',
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden'
-          }}>
-            {note.content}
-          </div>
-
-          {note.tags && note.tags.length > 0 && (
-            <div className="note-tags">
-              {note.tags.map((tag, idx) => (
-                <span key={idx} className="note-tag">
-                  #{tag}
-                </span>
-              ))}
-            </div>
-          )}
+      key={note.id} 
+      className="note-card"
+      onClick={() => setViewingNote(note)} 
+      style={{ cursor: 'pointer' }}
+    >
+      <div className="note-header">
+        <h3 className="note-title">{note.title}</h3>
+        <div className="note-actions" onClick={(e) => e.stopPropagation()}>
+          <button
+            className="action-btn edit-btn"
+            onClick={() => handleEdit(note)}
+            title="Edit"
+          >
+            ✎
+          </button>
+          <button
+            className="action-btn delete-btn"
+            onClick={() => {
+              setNoteToDelete(note);
+              setShowDeleteDialog(true);
+            }}
+            title="Delete"
+          >
+            ✕
+          </button>
         </div>
-      ))}
+      </div>
+
+      {note.lecture_date && (
+        <div className="note-date">
+          {(() => {
+            const [year, month, day] = note.lecture_date.split('-').map(Number);
+            return new Date(year, month - 1, day).toLocaleDateString("en-US", {
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            });
+          })()}
+        </div>
+      )}
+
+      {/* Note content snippet */}
+      <div className="note-content" style={{
+        display: '-webkit-box',
+        WebkitLineClamp: '3',
+        WebkitBoxOrient: 'vertical',
+        overflow: 'hidden'
+      }}>
+        {note.content}
+      </div>
+
+      {note.tags && note.tags.length > 0 && (
+        <div className="note-tags">
+          {note.tags.map((tag, idx) => (
+            <span key={idx} className="note-tag">
+              #{tag}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
-                ))}
-              </div>
+  ))}
+</div>
             </div>
           ))}
         </div>
@@ -352,7 +386,10 @@ export default function Notes() {
               <div>
                 <h2 style={{ margin: 0 }}>{viewingNote.title}</h2>
                 <span className="note-date">
-                  {viewingNote.lecture_date && new Date(viewingNote.lecture_date).toLocaleDateString()}
+                  {viewingNote.lecture_date && (() => {
+                    const [year, month, day] = viewingNote.lecture_date.split('-').map(Number);
+                    return new Date(year, month - 1, day).toLocaleDateString();
+                  })()}
                 </span>
               </div>
               <button className="close-btn" onClick={() => setViewingNote(null)}>✕</button>
@@ -373,11 +410,20 @@ export default function Notes() {
             </div>
 
             <div className="form-actions">
-              <button className="cancel-btn" onClick={() => setViewingNote(null)}>Close</button>
+              <button className="cancel-btn" onClick={() => setViewingNote(null)}>
+                Close
+              </button>
+              
+              <button className="export-pdf-btn" onClick={() => handleExportPDF(viewingNote)}>
+                <span className="btn-icon">📄</span> Export PDF
+              </button>
+
               <button className="submit-btn" onClick={() => {
                 handleEdit(viewingNote);
                 setViewingNote(null);
-              }}>Edit Note</button>
+              }}>
+                Edit Note
+              </button>
             </div>
           </div>
         </div>
