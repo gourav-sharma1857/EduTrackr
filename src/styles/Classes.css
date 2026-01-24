@@ -1,11 +1,14 @@
 .classes-container {
-  padding: 24px 32px;
+  padding: 40px;
   background: #0f172a;
   min-height: 100vh;
-  color: #e2e8f0;
+  color: #f1f5f9;
+  display: flex;
+  flex-direction: column;
 }
 
 .class-card-pro {
+  min-width: 0;
   background: #0d1830;
   border-radius: 12px;
   display: flex;
@@ -89,6 +92,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.minimal-btn.edit-btn {
+  background: #ffffff;
+  color: #000000;
+  border-color: #bfdbfe;
 }
 
 .minimal-btn.edit-btn:hover {
@@ -270,7 +279,9 @@
   }
 
 .classes-section {
-  margin-bottom: 32px;
+  width: 100%;
+  max-width: 1400px; 
+  margin-bottom: 40px;
 }
 
 .classes-section h2 {
@@ -285,9 +296,10 @@
 }
 
 .classes-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
-  gap: 16px;
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important; /* Strictly two halves */
+  gap: 24px;
+  width: 100%;
 }
 
 .class-card {
@@ -712,7 +724,7 @@
   }
   
   .classes-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
   }
   
   .form-row {

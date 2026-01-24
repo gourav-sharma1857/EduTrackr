@@ -199,16 +199,22 @@ export default function Classes() {
           <h2>Past Classes ({inactiveClasses.length})</h2>
           <div className="classes-grid">
             {inactiveClasses.map(cls => (
-              <div key={cls.id} className="class-card inactive" style={{ borderTopColor: cls.color }}>
-                <div className="class-header">
-                  <div className="class-color" style={{ backgroundColor: cls.color }}></div>
-                  <div className="class-title">
-                    <h3>{cls.course_code}</h3>
-                    <p>{cls.course_name}</p>
+              <div key={cls.id} className="class-card-pro" style={{ opacity: 0.5, filter: 'grayscale(0.5)' }}>
+                <div className="status-accent" style={{ backgroundColor: '#64748b' }}></div>
+                <div className="card-content">
+                  <div className="card-top-section">
+                    <div className="brand-stack">
+                      <span className="category-badge">Archived</span>
+                      <h3 className="course-code-display" style={{ color: '#94a3b8' }}>{cls.course_code}</h3>
+                      <p className="course-name-display">{cls.course_name}</p>
+                    </div>
+                    <div className="action-cluster">
+                      <button className="minimal-btn status-btn" onClick={() => toggleActive(cls)}>Restore</button>
+                      <button className="minimal-btn danger" onClick={() => { setClassToDelete(cls); setShowDeleteDialog(true); }}>Delete</button>
+                    </div>
                   </div>
-                  <div className="class-actions">
-                    <button onClick={() => toggleActive(cls)} title="Reactivate">🔄</button>
-                    <button onClick={() => handleDelete(cls.id)}>🗑️</button>
+                  <div className="card-bottom-section">
+                    <span style={{ fontSize: '12px', color: '#64748b' }}>Last attended: {cls.semester}</span>
                   </div>
                 </div>
               </div>
