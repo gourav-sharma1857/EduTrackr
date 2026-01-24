@@ -4,6 +4,11 @@ import { db, auth } from "../firebase.js";
 import { onAuthStateChanged } from "firebase/auth";
 import { Link } from "react-router-dom";
 import "../styles/HomePage.css";
+import { 
+  LayoutDashboard, BookOpen, FileText, Calendar, 
+  StickyNote, CheckSquare, Briefcase, GraduationCap, 
+  Trophy, Calculator, User , LogOut
+} from 'lucide-react';
 
 export default function HomePage() {
   const [user , setUser] = useState(null);
@@ -273,7 +278,7 @@ const sortedTodayClasses = todayClasses
       {/* Top 3 Stat Cards */}
       <div className="top-stats">
         <Link to="/GPACalculator" className="stat-card gpa">
-          <div className="stat-icon-bg">📊</div>
+          <div ><Calculator size={40} /></div>
           <div className="stat-info">
             <span className="stat-value" style={{ color: gpaData.gpa >= 3.5 ? '#10b981' : gpaData.gpa >= 3.0 ? '#3b82f6' : '#f59e0b' }}>
               {gpaData.hasData ? gpaData.gpa : 'N/A'}

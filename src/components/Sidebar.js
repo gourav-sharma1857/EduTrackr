@@ -3,19 +3,24 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { auth } from "../firebase";
 import { signOut } from "firebase/auth";
 import "../styles/Sidebar.css";
+import { 
+  LayoutDashboard, BookOpen, FileText, Calendar, 
+  StickyNote, CheckSquare, Briefcase, GraduationCap, 
+  Trophy, Calculator, User , LogOut
+} from 'lucide-react';
 
 const menuItems = [
-  { label: "Dashboard", path: "/", icon: "📊" },
-  { label: "Classes", path: "/classes", icon: "📚" },
-  { label: "Assignments", path: "/assignments", icon: "📝" },
-  { label: "Calendar", path: "/calendar", icon: "📅" },
-  { label: "Notes", path: "/notes", icon: "📔" },
-  { label: "To-Do List", path: "/todo", icon: "✅" },
-  { label: "Career", path: "/career", icon: "💼" },
-  { label: "Degree Planner", path: "/degree-planner", icon: "🎓" },
-  { label: "Grade Tracker", path: "/gradetracker", icon: "🏆" },
-  { label: "GPA Calculator", path: "/gpacalculator", icon: "🧮" },
-  { label: "Profile", path: "/profile", icon: "👤" },
+  { label: "Dashboard", path: "/", icon: <LayoutDashboard size={20} /> },
+  { label: "Classes", path: "/classes", icon: <BookOpen size={20} /> },
+  { label: "Assignments", path: "/assignments", icon: <FileText size={20} /> },
+  { label: "Calendar", path: "/calendar", icon: <Calendar size={20} /> },
+  { label: "Notes", path: "/notes", icon: <StickyNote size={20} /> },
+  { label: "To-Do List", path: "/todo", icon: <CheckSquare size={20} /> },
+  { label: "Career", path: "/career", icon: <Briefcase size={20} /> },
+  { label: "Degree Planner", path: "/degree-planner", icon: <GraduationCap size={20} /> },
+  { label: "Grade Tracker", path: "/gradetracker", icon: <Trophy size={20} /> },
+  { label: "GPA Calculator", path: "/gpacalculator", icon: <Calculator size={20} /> },
+  { label: "Profile", path: "/profile", icon: <User size={20} /> },
 ];
 
 export default function Sidebar() {
@@ -110,11 +115,13 @@ export default function Sidebar() {
         </nav>
 
         <div className="sidebar-footer">
-          <button className="logout-btn" onClick={handleLogout} title={!showLabels ? "Logout" : ""}>
-            <span className="nav-icon">🚪</span>
-            {showLabels && <span className="nav-label">Logout</span>}
-          </button>
-        </div>
+        <button className="logout-btn" onClick={handleLogout} title={!showLabels ? "Logout" : ""}>
+          <div className="nav-icon">
+            <LogOut size={20} />
+          </div>
+          {showLabels && <span className="nav-label">Logout</span>}
+        </button>
+      </div>
       </div>
 
       {!collapsed && (
