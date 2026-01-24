@@ -138,34 +138,56 @@ export default function Classes() {
         ) : (
           <div className="classes-grid">
             {activeClasses.map(cls => (
-              <div key={cls.id} className="class-card" style={{ borderTopColor: cls.color }}>
-                <div className="class-header">
-                  <div className="class-color" style={{ backgroundColor: cls.color }}></div>
-                  <div className="class-title">
-                    <h3>{cls.course_code}</h3>
-                    <p>{cls.course_name}</p>
-                  </div>
-                  <div className="class-actions">
-                    <button title="Edit" onClick={() => handleEdit(cls)}>✏️</button>
-                    <button title="InActive" onClick={() => toggleActive(cls)}>📦</button>
-                    <button title="Delete" onClick={() => {setClassToDelete(cls);   setShowDeleteDialog(true);  }}>🗑️</button>                      
-                  </div>
-                </div>
-                <div className="class-details">
-                  {cls.professor && <div className="detail-item"><span>👤</span> {cls.professor}</div>}
-                  {cls.start_time && cls.end_time && (
-                    <div className="detail-item"><span>🕐</span> {cls.start_time} - {cls.end_time}</div>
-                  )}
-                  {cls.credit_hours && <div className="detail-item"><span>📚</span> {cls.credit_hours} credits</div>}
-                  {cls.days && cls.days.length > 0 && (
-                    <div className="class-days">
-                      {cls.days.map(day => (
-                        <span key={day} className="day-badge">{day.substring(0, 3)}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+  <div key={cls.id} className="class-card-pro">
+  <div className="status-accent" style={{ backgroundColor: cls.color }}></div>
+  
+  <div className="card-content">
+    <div className="card-top-section">
+      <div className="brand-stack">
+        <span className="category-badge">{cls.category}</span>
+        <h3 className="course-code-display" style={{ color: cls.color }}>{cls.course_code}</h3>
+        <p className="course-name-display">{cls.course_name}</p>
+      </div>
+
+      <div className="action-cluster">
+        <button className="minimal-btn edit-btn" onClick={() => handleEdit(cls)}>Edit</button>
+        <button className="minimal-btn status-btn" onClick={() => toggleActive(cls)}>Archive</button>
+        <button className="minimal-btn danger" onClick={() => { setClassToDelete(cls); setShowDeleteDialog(true); }}>Delete</button>
+      </div>
+    </div>
+
+    <div className="card-divider"></div>
+
+    <div className="card-bottom-section">
+      <div className="data-grid">
+        <div className="data-point">
+          <label>Instructor</label>
+          <span>{cls.professor || 'TBD'}</span>
+        </div>
+        <div className="data-point">
+          <label>Time & Duration</label>
+          <span>{cls.start_time} — {cls.end_time}</span>
+        </div>
+        <div className="data-point">
+          <label>Credit Hours</label>
+          <span>{cls.credit_hours} Credit Units</span>
+        </div>
+      </div>
+
+      <div className="schedule-preview">
+        {DAYS.map(day => (
+          <div 
+            key={day} 
+            className={`day-slot ${cls.days.includes(day) ? 'is-active' : ''}`}
+            style={{ backgroundColor: cls.days.includes(day) ? cls.color : 'transparent' }}
+          >
+            {day.substring(0, 2)}
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+</div>
             ))}
           </div>
         )}
