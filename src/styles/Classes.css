@@ -297,7 +297,7 @@
 
 .classes-grid {
   display: grid !important;
-  grid-template-columns: 1fr 1fr !important; /* Strictly two halves */
+  grid-template-columns: 1fr 1fr !important; 
   gap: 24px;
   width: 100%;
 }
@@ -716,6 +716,22 @@
   margin-top: 24px;
   padding-top: 20px;
   border-top: 1px solid #334155;
+}
+
+@media (max-width: 900px) { 
+  .classes-grid {
+    grid-template-columns: 1fr !important; 
+    gap: 16px;
+  }
+
+  .class-card-pro {
+    flex-direction: column; 
+  }
+
+  .data-grid {
+    gap: 1rem;
+    flex-wrap: wrap; 
+  }
 }
 
 @media (max-width: 768px) {

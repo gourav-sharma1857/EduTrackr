@@ -35,35 +35,54 @@
   background: #0f172a;
 }
 
-/* Filter Tabs */
 .filter-tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
+  display: inline-flex;
+  background: rgba(30, 41, 59, 0.6); /* Deep slate glass */
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 30px;
+  backdrop-filter: blur(10px);
 }
 
 .filter-btn {
-  padding: 10px 16px;
-  background: #1e293b;
-  border: 1px solid #334155;
+  padding: 8px 20px;
   border-radius: 8px;
+  border: none;
+  background: transparent;
   color: #94a3b8;
-  font-size: 0.8125rem;
+  font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .filter-btn:hover {
-  border-color: #6366f1;
-  color: #e2e8f0;
+  color: #f1f5f9;
 }
 
 .filter-btn.active {
-  background: rgba(99, 102, 241, 0.2);
-  border-color: #6366f1;
-  color: #a5b4fc;
+  background: #334155; /* Solid slate highlight */
+  color: #3b82f6; /* Modern Blue text */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* The Number Badge inside the button */
+.filter-count {
+  font-size: 0.7rem;
+  background: rgba(15, 23, 42, 0.5);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #64748b;
+  transition: all 0.2s;
+}
+
+.filter-btn.active .filter-count {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
 }
 
 .empty-card {
@@ -80,24 +99,66 @@
 .assignments-list {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
 }
 
 .class-group {
   background: #1e293b;
   border-radius: 12px;
-  border: 1px solid #334155;
+  border: 1px solid #ffffff;
   overflow: hidden;
 }
 
 .class-group-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px 20px;
-  background: #0f172a;
-  border-left: 4px solid #3b82f6;
-  flex-wrap: wrap;
+  justify-content: space-between; 
+  padding: 18px 24px;
+  background: #0f172a; 
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(234, 229, 229, 0.05); 
+  border-left: 4px solid #3b82f6; 
+  border-radius: 12px;
+  margin-bottom: 20px;
+  transition: all 0.2s ease;
+}
+
+.title-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.course-label {
+  font-size: 15px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: #64748b; /* Slate 400 */
+}
+
+.class-group-header h3 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #f8fafc;
+  margin: 0;
+  letter-spacing: -0.5px;
+}
+
+.class-name {
+  color: #94a3b8;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.assignment-count {
+  background: rgba(15, 23, 42, 0.6);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .class-group-header h3 {
@@ -122,7 +183,7 @@
 }
 
 .class-assignments {
-  padding: 12px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -156,7 +217,7 @@
 
 /* Target the checkbox itself to look like a pill button */
 .assignment-checkbox input[type="checkbox"] {
-  appearance: none; /* Removes the default box */
+  appearance: none; 
   -webkit-appearance: none;
   background-color: #f1f5f9;
   border: 1px solid #e2e8f0;
@@ -206,8 +267,8 @@
 .assignment-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 6px;
+  gap: 7px;
+  margin-bottom: 4px;
   flex-wrap: wrap;
 }
 

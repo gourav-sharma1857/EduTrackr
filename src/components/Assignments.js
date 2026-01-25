@@ -4,6 +4,7 @@ import { db, auth } from "../firebase.js";
 import { onAuthStateChanged } from "firebase/auth";
 import { writeBatch } from "firebase/firestore"
 import "../styles/Assignments.css";
+import { Folder } from 'lucide-react';
 
 export default function Assignments() {
   const [user, setUser] = useState(null);
@@ -246,41 +247,70 @@ const isTomorrow = (dateString) => {
 
       {/* Filter Tabs */}
       <div className="filter-tabs">
-        <button className={`filter-btn ${filter === "pending" ? "active" : ""}`} onClick={() => setFilter("pending")}>
-          📋 Pending ({assignments.filter(a => !a.is_completed).length})
+        <button 
+          className={`filter-btn ${filter === "pending" ? "active" : ""}`} 
+          onClick={() => setFilter("pending")}
+        >
+          Pending 
+          <span className="filter-count">
+            {assignments.filter(a => !a.is_completed).length}
+          </span>
         </button>
-        <button className={`filter-btn ${filter === "completed" ? "active" : ""}`} onClick={() => setFilter("completed")}>
-          ✅ Completed ({assignments.filter(a => a.is_completed).length})
+
+        <button 
+          className={`filter-btn ${filter === "completed" ? "active" : ""}`} 
+          onClick={() => setFilter("completed")}
+        >
+          Completed 
+          <span className="filter-count">
+            {assignments.filter(a => a.is_completed).length}
+          </span>
         </button>
-        <button className={`filter-btn ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>
-          📚 All ({assignments.length})
+
+        <button 
+          className={`filter-btn ${filter === "all" ? "active" : ""}`} 
+          onClick={() => setFilter("all")}
+        >
+          All 
+          <span className="filter-count">{assignments.length}</span>
         </button>
       </div>
 
       {/* Assignments List */}
-     {Object.keys(groupedData).length === 0 ? (
-  <div className="empty-card">
-    {filter === "pending" ? "No pending assignments! 🎉" : "No assignments found"}
-  </div>
-) : (
-      <div className="assignments-list">
-        {Object.values(groupedData).map(({ classInfo, categories }) => (
-          <div key={classInfo?.id || "unknown"} className="class-group">
-            {/* Level 1: Class Header */}
-            <div className="class-group-header" style={{ borderLeftColor: classInfo?.color || "#64748b" }}>
-              <h3>{classInfo?.course_code || "Unknown Class"}</h3>
-              <span className="class-name">{classInfo?.course_name}</span>
-              <span className="assignment-count">
-                {Object.values(categories).flat().length} Total
-              </span>
-            </div>
+          {Object.keys(groupedData).length === 0 ? (
+        <div className="empty-card">
+          {filter === "pending" ? "No pending assignments! 🎉" : "No assignments found"}
+        </div>
+      ) : (
+            <div className="assignments-list">
+              {Object.values(groupedData).map(({ classInfo, categories }) => (
+                <div key={classInfo?.id || "unknown"} className="class-group">
+                  {/* Level 1: Class Header */}
+                  <div 
+        className="class-group-header" 
+        style={{ borderLeftColor: classInfo?.color || "#3b82f6" }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div className="title-stack">
+            {/* Tiny code label above the main name */}
+            <span className="course-label" style={{ color: classInfo?.color }}>
+              {classInfo?.course_code || "CODE"}
+            </span>
+            <h3>{classInfo?.course_name || "Unknown Class"}</h3>
+          </div>
+        </div>
+
+        <span className="assignment-count">
+          {Object.values(categories).flat().length} Assignments
+        </span>
+      </div>
 
             <div className="class-content" style={{ paddingLeft: '1rem', marginTop: '0.5rem' }}>
               {/* Level 2: Category Dropdowns */}
               {Object.keys(categories).sort().map((catName) => (
                 <details key={catName} className="category-dropdown"  style={{ marginBottom: '0.5rem', border: '1px solid rgba(30, 41, 59, 0.9)', borderRadius: '8px', overflow: 'hidden' }}>
                   <summary style={{ padding: '0.75rem', background: 'rgba(30, 41, 59, 0.9)', cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: '600' }}>
-                    <span style={{ marginRight: '10px' }}>📁</span>
+                    <span style={{ marginRight: '10px' }}><Folder size={18} fill="rgba(59, 130, 246, 0.2)" /></span>
                     {catName}
                     <span style={{ marginLeft: 'auto', fontSize: '0.8rem', opacity: 0.6 }}>
                       {categories[catName].length} items
