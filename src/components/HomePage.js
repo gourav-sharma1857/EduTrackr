@@ -288,7 +288,7 @@ const sortedTodayClasses = todayClasses
         </Link>
 
         <Link to="/degree-planner" className="stat-card degree">
-          <div className="stat-icon-bg">🎓</div>
+          <div className="stat-icon-bg"><GraduationCap size={40}/></div>
           <div className="stat-info">
             <span className="stat-value">{degreeProgress.percentage.toFixed(0)}%</span>
             <span className="stat-label">{degreeProgress.totalCompleted} / {degreeProgress.totalRequired} credits</span>
@@ -299,7 +299,7 @@ const sortedTodayClasses = todayClasses
         </Link>
 
         <Link to="/gradetracker" className="stat-card grades">
-          <div className="stat-icon-bg">📈</div>
+          <div className="stat-icon-bg"> <Trophy size={40} /></div>
           <div className="stat-info">
             <span className="stat-value">{gradedAssignments.length}</span>
             <span className="stat-label">Graded Assignments</span>
@@ -314,7 +314,7 @@ const sortedTodayClasses = todayClasses
         <Link to="/classes" className="preview-card large">
           <div className="preview-header">
             <div className="preview-title-row">
-              <span className="preview-icon">📚</span>
+              <span className="preview-icon"><BookOpen size={20} /></span>
               <h3>Today's Schedule</h3>
             </div>
             <span className="preview-badge blue">{todayClasses.length} classes</span>
@@ -355,7 +355,7 @@ const sortedTodayClasses = todayClasses
         <Link to="/assignments" className="preview-card">
           <div className="preview-header">
             <div className="preview-title-row">
-              <span className="preview-icon">📝</span>
+              <span className="preview-icon"><FileText size={20} /> </span>
               <h3>Assignments</h3>
             </div>
             <span className="preview-badge purple">{assignments.length} due</span>
@@ -392,7 +392,7 @@ const sortedTodayClasses = todayClasses
         <Link to="/todo" className="preview-card">
           <div className="preview-header">
             <div className="preview-title-row">
-              <span className="preview-icon">✅</span>
+              <span className="preview-icon"><CheckSquare size={20} /></span>
               <h3>To-Do</h3>
             </div>
             <span className="preview-badge green">{todos.length} tasks</span>
@@ -422,7 +422,7 @@ const sortedTodayClasses = todayClasses
         <Link to="/career" className="preview-card">
           <div className="preview-header">
             <div className="preview-title-row">
-              <span className="preview-icon">💼</span>
+              <span className="preview-icon"><Briefcase size={20} /></span>
               <h3>Career</h3>
             </div>
             <span className="preview-badge orange">{applications.length} apps</span>
@@ -457,7 +457,7 @@ const sortedTodayClasses = todayClasses
         <Link to="/notes" className="preview-card">
           <div className="preview-header">
             <div className="preview-title-row">
-              <span className="preview-icon">📒</span>
+              <span className="preview-icon"><StickyNote size={20} /></span>
               <h3>Notes</h3>
             </div>
             <span className="preview-badge">{notes.length} notes</span>
@@ -490,7 +490,7 @@ const sortedTodayClasses = todayClasses
         <Link to="/calendar" className="preview-card">
           <div className="preview-header">
             <div className="preview-title-row">
-              <span className="preview-icon">📅</span>
+              <span className="preview-icon"><Calendar size={20} /></span>
               <h3>Calendar</h3>
             </div>
           </div>

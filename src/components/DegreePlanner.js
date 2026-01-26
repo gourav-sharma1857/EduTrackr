@@ -488,16 +488,16 @@ const handleConfirmDeleteSemester = async () => {
       <div className="tabs-container">
         <div className="tabs-header">
           <button className={`tab-btn ${activeTab === "semesters" ? "active" : ""}`} onClick={() => setActiveTab("semesters")}>
-            📅 Semesters
+             Semesters
           </button>
           <button className={`tab-btn ${activeTab === "core" ? "active" : ""}`} onClick={() => setActiveTab("core")}>
-            📚 Core
+             Core
           </button>
           <button className={`tab-btn ${activeTab === "major" ? "active" : ""}`} onClick={() => setActiveTab("major")}>
-            🎓 Major
+             Major
           </button>
           <button className={`tab-btn ${activeTab === "minor" ? "active" : ""}`} onClick={() => setActiveTab("minor")}>
-            📖 Minor
+             Minor
           </button>
         </div>
 

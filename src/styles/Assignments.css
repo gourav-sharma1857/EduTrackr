@@ -208,14 +208,12 @@
   opacity: 0.6;
 }
 
-/* Container for the status action */
 .assignment-checkbox {
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* Target the checkbox itself to look like a pill button */
 .assignment-checkbox input[type="checkbox"] {
   appearance: none; 
   -webkit-appearance: none;
@@ -597,7 +595,7 @@
   margin-bottom: 0.5rem;
   border: 1px solid #e2e8f0;
   border-radius: 6px;
-  background: rgba(30, 41, 59, 0.9);
+  background: rgba(15, 23, 42, 0.6);
 }
 
 .category-summary {

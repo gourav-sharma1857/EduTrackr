@@ -142,56 +142,37 @@ export default function GpaCalculator() {
   };
 
   const calculateCumulativeGPA = () => {
-    
-    let calculatedPoints = 0;
-    let calculatedCredits = 0;
+  // 1. Get Prior History from Profile
+  const priorGpa = userProfile?.current_gpa ? Number(userProfile.current_gpa) : 0;
+  const priorCredits = userProfile?.completed_credit_hours ? Number(userProfile.completed_credit_hours) : 0;
 
-    allCompletedCourses.forEach(course => {
-      if (!course.is_transfer) {
-        const gpaValue = typeof course.final_gpa === 'number'
-          ? course.final_gpa
-          : (typeof course.grade === 'number' ? getLetterGrade(course.grade).gpa : null);
-        if (gpaValue != null) {
-          calculatedPoints += gpaValue * (course.credit_hours || 0);
-          calculatedCredits += (course.credit_hours || 0);
-        }
-      }
-    });
+  // 2. Check if the CURRENT semester is fully finished
+  // We check if every active class has its assignments graded
+  const allCurrentClassesGraded = classes.every(cls => {
+    const gradeInfo = calculateClassGrade(cls.id);
+    return gradeInfo !== null; // Returns false if any class has 0 assignments graded
+  });
 
-    classes.forEach(cls => {
-      const grade = calculateClassGrade(cls.id);
-      if (grade && !cls.is_transfer) {
-        calculatedPoints += (grade.letterGrade.gpa * (cls.credit_hours || 0));
-        calculatedCredits += (cls.credit_hours || 0);
-      }
-    });
+  // 3. Calculate Current Semester Points
+  let currentPoints = 0;
+  let currentCredits = 0;
 
-    
-    
-    const priorGpa = userProfile?.current_gpa ?? null;
-    const priorCredits = Number(userProfile?.completed_credit_hours || 0);
-    
-    
-    if (priorGpa != null && calculatedCredits === 0) {
-      return priorGpa;
+  classes.forEach(cls => {
+    const grade = calculateClassGrade(cls.id);
+    if (grade && !cls.is_transfer) {
+      currentPoints += (grade.letterGrade.gpa * (Number(cls.credit_hours) || 0));
+      currentCredits += (Number(cls.credit_hours) || 0);
     }
+  });
 
-    if (priorGpa != null && priorCredits > 0) {
-      const priorPoints = priorGpa * priorCredits;
-      const totalPoints = priorPoints + calculatedPoints;
-      const totalCredits = priorCredits + calculatedCredits;
-      return totalCredits > 0 ? (totalPoints / totalCredits) : priorGpa;
-    }
+  if (allCurrentClassesGraded && currentCredits > 0) {
+    const totalPoints = (priorGpa * priorCredits) + currentPoints;
+    const totalCredits = priorCredits + currentCredits;
+    return totalCredits > 0 ? (totalPoints / totalCredits) : priorGpa;
+  }
 
-    
-    return calculatedCredits > 0 ? (calculatedPoints / calculatedCredits) : (priorGpa != null ? priorGpa : 0);
-  };
-
-  const calculateTotalCredits = () => {
-    const completed = allCompletedCourses.reduce((sum, c) => sum + (c.credit_hours || 0), 0);
-    const current = classes.reduce((sum, c) => sum + (c.credit_hours || 0), 0);
-    return completed + current;
-  };
+  return priorGpa;
+};
 
   const semesterGPA = calculateSemesterGPA();
   const cumulativeGPA = calculateCumulativeGPA();
@@ -227,7 +208,11 @@ export default function GpaCalculator() {
               {cumulativeGPA.toFixed(2)}
             </span>
             <span className="gpa-label">Cumulative GPA</span>
-            <span className="gpa-sublabel">Including previous semesters</span>
+            <span className="gpa-sublabel">
+              {classes.every(cls => calculateClassGrade(cls.id)) 
+                ? "Updated with current semester" 
+                : "Locked until all assignments are graded"}
+            </span>
           </div>
         </div>
 
