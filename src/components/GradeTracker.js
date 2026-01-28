@@ -17,6 +17,7 @@ export default function GradeTracker() {
   const [categoryWeights, setCategoryWeights] = useState({});
   const [anticipatedGrades, setAnticipatedGrades] = useState({});
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState({});
   const [manualData, setManualData] = useState({
     title: "",
     category: "Assignment",
@@ -42,6 +43,21 @@ export default function GradeTracker() {
     await addDoc(collection(db, "assignments"), newAssignment);
     setIsManualModalOpen(false);
     setManualData({ title: "", category: "Assignment", total_points: "", earned_points: "", class_id: "" });
+  };
+
+  const toggleCategory = (key) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  const sortByDueDate = (assignments) => {
+    return [...assignments].sort((a, b) => {
+      const dateA = new Date(a.due_date || '9999-12-31');
+      const dateB = new Date(b.due_date || '9999-12-31');
+      return dateA - dateB;
+    });
   };
 
   useEffect(() => {
@@ -346,40 +362,72 @@ export default function GradeTracker() {
 {classAssignments.length > 0 && (
   <div className="assignments-section">
     <h3>✅ Graded Assignments</h3>
-    {classAssignments.map((assignment) => (
-      <div key={assignment.id} className="assignment-grade-item">
-        <div className="assignment-grade-info">
-          <h4>{assignment.title}</h4>
-          <div className="assignment-badges">
-            <span className="badge-category">{assignment.category}</span>
-            <span className="badge-points">{assignment.total_points} pts</span>
-          </div>
-          {assignment.is_graded ? (
-            <div className="grade-display" style={{ color: getGradeColor((assignment.earned_points / assignment.total_points) * 100) }}>
-              {assignment.earned_points}/{assignment.total_points} pts ({((assignment.earned_points / assignment.total_points) * 100).toFixed(1)}%)
+    {(() => {
+      const groupedByCategory = {};
+      classAssignments.forEach(assignment => {
+        const cat = assignment.category || 'Other';
+        if (!groupedByCategory[cat]) {
+          groupedByCategory[cat] = [];
+        }
+        groupedByCategory[cat].push(assignment);
+      });
+
+      return Object.keys(groupedByCategory).map((category) => {
+        const categoryKey = `graded-${cls.id}-${category}`;
+        const isExpanded = expandedCategories[categoryKey] !== false;
+        const categoryAssignments = sortByDueDate(groupedByCategory[category]);
+
+        return (
+          <div key={category} className="category-folder">
+            <div className="category-header" onClick={() => toggleCategory(categoryKey)}>
+              <span className="folder-icon">{isExpanded ? '📂' : '📁'}</span>
+              <span className="category-name">{category}</span>
+              <span className="category-count">({categoryAssignments.length})</span>
+              <span className="toggle-arrow">{isExpanded ? '▼' : '▶'}</span>
             </div>
-          ) : (
-            <span className="not-graded">Not graded yet</span>
-          )}
-        </div>
-        
-        {/* ACTION BUTTONS GROUP */}
-        <div className="assignment-actions">
-          <button className="btn-small" onClick={() => handleAddGrade(assignment)}>
-            {assignment.is_graded ? "Edit" : "Add Grade"}
-          </button>
-          <button 
-            className="btn-delete-icon" 
-                onClick={(e) => {
-                  e.stopPropagation(); 
-                  confirmDelete(assignment);
-                    }}
-          >
-            🗑️
-          </button>
-        </div>
-      </div>
-    ))}
+            {isExpanded && (
+              <div className="category-content">
+                {categoryAssignments.map((assignment) => (
+                  <div key={assignment.id} className="assignment-grade-item">
+                    <div className="assignment-grade-info">
+                      <h4>{assignment.title}</h4>
+                      <div className="assignment-badges">
+                        <span className="badge-points">{assignment.total_points} pts</span>
+                        {assignment.due_date && (
+                          <span className="badge-duedate">{new Date(assignment.due_date).toLocaleDateString()}</span>
+                        )}
+                      </div>
+                      {assignment.is_graded ? (
+                        <div className="grade-display" style={{ color: getGradeColor((assignment.earned_points / assignment.total_points) * 100) }}>
+                          {assignment.earned_points}/{assignment.total_points} pts ({((assignment.earned_points / assignment.total_points) * 100).toFixed(1)}%)
+                        </div>
+                      ) : (
+                        <span className="not-graded">Not graded yet</span>
+                      )}
+                    </div>
+                    
+                    <div className="assignment-actions">
+                      <button className="btn-small" onClick={() => handleAddGrade(assignment)}>
+                        {assignment.is_graded ? "Edit" : "Add Grade"}
+                      </button>
+                      <button 
+                        className="btn-delete-icon" 
+                        onClick={(e) => {
+                          e.stopPropagation(); 
+                          confirmDelete(assignment);
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      });
+    })()}
   </div>
 )}
 
@@ -388,35 +436,68 @@ export default function GradeTracker() {
                   <div className="anticipator-section">
                     <h3>🎯 Grade Anticipator</h3>
                     <p className="anticipator-hint">Adjust sliders to see how future grades affect your overall grade</p>
-                    {classPending.map((assignment) => (
-                      <div key={assignment.id} className="anticipator-item">
-                        <div className="anticipator-info">
-                          <h4>{assignment.title}</h4>
-                          <div className="anticipator-badges">
-                            <span className="badge-category">{assignment.category}</span>
-                            <span className="badge-points">{assignment.total_points} pts</span>
-                            {categoryWeights[`${cls.id}_${assignment.category}`] > 0 && (
-                              <span className="badge-weight">{categoryWeights[`${cls.id}_${assignment.category}`]}% weight</span>
+                    {(() => {
+                      const groupedByCategory = {};
+                      classPending.forEach(assignment => {
+                        const cat = assignment.category || 'Other';
+                        if (!groupedByCategory[cat]) {
+                          groupedByCategory[cat] = [];
+                        }
+                        groupedByCategory[cat].push(assignment);
+                      });
+
+                      return Object.keys(groupedByCategory).map((category) => {
+                        const categoryKey = `anticipator-${cls.id}-${category}`;
+                        const isExpanded = expandedCategories[categoryKey] !== false;
+                        const categoryAssignments = sortByDueDate(groupedByCategory[category]);
+
+                        return (
+                          <div key={category} className="category-folder anticipator-category">
+                            <div className="category-header anticipator-header" onClick={() => toggleCategory(categoryKey)}>
+                              <span className="folder-icon">{isExpanded ? '📂' : '📁'}</span>
+                              <span className="category-name">{category}</span>
+                              <span className="category-count">({categoryAssignments.length})</span>
+                              <span className="toggle-arrow">{isExpanded ? '▼' : '▶'}</span>
+                            </div>
+                            {isExpanded && (
+                              <div className="category-content anticipator-content">
+                                {categoryAssignments.map((assignment) => (
+                                  <div key={assignment.id} className="anticipator-item">
+                                    <div className="anticipator-info">
+                                      <h4>{assignment.title}</h4>
+                                      <div className="anticipator-badges">
+                                        <span className="badge-points">{assignment.total_points} pts</span>
+                                        {assignment.due_date && (
+                                          <span className="badge-duedate">{new Date(assignment.due_date).toLocaleDateString()}</span>
+                                        )}
+                                        {categoryWeights[`${cls.id}_${assignment.category}`] > 0 && (
+                                          <span className="badge-weight">{categoryWeights[`${cls.id}_${assignment.category}`]}% weight</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="anticipator-slider">
+                                      <input
+                                        type="range"
+                                        min="0"
+                                        max="100"
+                                        value={anticipatedGrades[assignment.id] || 0}
+                                        onChange={(e) => setAnticipatedGrades({
+                                          ...anticipatedGrades,
+                                          [assignment.id]: Number(e.target.value)
+                                        })}
+                                      />
+                                      <span className="slider-value" style={{ color: getGradeColor(anticipatedGrades[assignment.id] || 0) }}>
+                                        {anticipatedGrades[assignment.id] || 0}%
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                             )}
                           </div>
-                        </div>
-                        <div className="anticipator-slider">
-                          <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            value={anticipatedGrades[assignment.id] || 0}
-                            onChange={(e) => setAnticipatedGrades({
-                              ...anticipatedGrades,
-                              [assignment.id]: Number(e.target.value)
-                            })}
-                          />
-                          <span className="slider-value" style={{ color: getGradeColor(anticipatedGrades[assignment.id] || 0) }}>
-                            {anticipatedGrades[assignment.id] || 0}%
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                        );
+                      });
+                    })()}
                   </div>
                 )}
               </div>
