@@ -277,10 +277,11 @@ export default function GradeTracker() {
       <div className="grade-tracker-header">
         <h1>Grade Tracker</h1>
         <p>Monitor your academic performance and anticipate future grades</p>
-      </div>
-      <button className="btn-primary" onClick={() => setIsManualModalOpen(true)}>
+        <button className="btn-primary" onClick={() => setIsManualModalOpen(true)}>
          + Quick Add Grade
-      </button>
+        </button>
+      </div>
+      
 
       {Object.keys(groupedByClass).length === 0 ? (
         <div className="empty-state-card">No assignments yet. Add assignments to track grades!</div>
@@ -374,7 +375,7 @@ export default function GradeTracker() {
 
       return Object.keys(groupedByCategory).map((category) => {
         const categoryKey = `graded-${cls.id}-${category}`;
-        const isExpanded = expandedCategories[categoryKey] !== false;
+        const isExpanded = !!expandedCategories[categoryKey];
         const categoryAssignments = sortByDueDate(groupedByCategory[category]);
 
         return (
@@ -448,7 +449,7 @@ export default function GradeTracker() {
 
                       return Object.keys(groupedByCategory).map((category) => {
                         const categoryKey = `anticipator-${cls.id}-${category}`;
-                        const isExpanded = expandedCategories[categoryKey] !== false;
+                        const isExpanded = !!expandedCategories[categoryKey];
                         const categoryAssignments = sortByDueDate(groupedByCategory[category]);
 
                         return (
