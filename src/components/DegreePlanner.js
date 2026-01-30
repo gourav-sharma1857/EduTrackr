@@ -513,7 +513,7 @@ const handleConfirmDeleteSemester = async () => {
             {currentClasses.length > 0 && (
               <div className="semester-block current">
                 <div className="semester-block-header">
-                  <h3>📍 Current Semester</h3>
+                  <h3> Current Semester</h3>
                   <span className="semester-credits">{currentClasses.reduce((sum, c) => sum + (c.credit_hours || 0), 0)} credits</span>
                 </div>
                 <div className="semester-courses-table">
