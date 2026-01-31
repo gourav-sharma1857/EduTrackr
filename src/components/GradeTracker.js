@@ -330,7 +330,7 @@ export default function GradeTracker() {
                 {/* Category Weights Section */}
                 {allCategories.length > 0 && (
                   <div className="category-weights-section">
-                    <h3>📊 Category Weights</h3>
+                    <h3> Category Weights</h3>
                     <p className="weights-hint">Set weights for weighted grade calculation (should total 100%)</p>
                     <div className="weights-grid">
                       {allCategories.map((cat) => {
@@ -362,7 +362,7 @@ export default function GradeTracker() {
                 {/* Graded Assignments */}
 {classAssignments.length > 0 && (
   <div className="assignments-section">
-    <h3>✅ Graded Assignments</h3>
+    <h3> Graded Assignments</h3>
     {(() => {
       const groupedByCategory = {};
       classAssignments.forEach(assignment => {
