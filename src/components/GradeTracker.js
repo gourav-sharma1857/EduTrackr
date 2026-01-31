@@ -435,7 +435,7 @@ export default function GradeTracker() {
                 {/* Grade Anticipator */}
                 {classPending.length > 0 && (
                   <div className="anticipator-section">
-                    <h3>🎯 Grade Anticipator</h3>
+                    <h3> Grade Anticipator</h3>
                     <p className="anticipator-hint">Adjust sliders to see how future grades affect your overall grade</p>
                     {(() => {
                       const groupedByCategory = {};
