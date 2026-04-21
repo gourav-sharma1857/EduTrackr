@@ -262,7 +262,7 @@ export default function GpaCalculator() {
                     {gradeInfo ? (
                       <div className="grade-display" style={{ color: getGradeColor(gradeInfo.letterGrade.gpa) }}>
                         <span className="letter-grade">{gradeInfo.letterGrade.grade}</span>
-                        <span className="percentage">{gradeInfo.percentage.toFixed(1)}%</span>
+                        <span className="percentage">{gradeInfo.percentage.toFixed(2)}%</span>
                       </div>
                     ) : (
                       <div className="grade-display no-grade">
@@ -292,7 +292,7 @@ export default function GpaCalculator() {
                             ></div>
                           </div>
                           <span className="category-percent">{data.percentage.toFixed(1)}%</span>
-                          <span className="category-points">{data.earned}/{data.total}</span>
+                          <span className="category-points">{data.earned.toFixed(1)}/{data.total}</span>
                         </div>
                       ))}
                     </div>
