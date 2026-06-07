@@ -1,1019 +1,1001 @@
-import React, { useState, useEffect } from "react";
-import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc } from "firebase/firestore";
+import React, { useState, useEffect, useMemo } from "react";
+import {
+  collection, query, where, onSnapshot,
+  addDoc, updateDoc, deleteDoc, doc,
+  getDoc, setDoc
+} from "firebase/firestore";
 import { db, auth } from "../firebase.js";
 import { onAuthStateChanged } from "firebase/auth";
+import {
+  Plus, Trash2, Settings, ChevronDown, ChevronUp,
+  GraduationCap, BookOpen, CheckCircle, Clock,
+  TrendingUp, Layers, Map as MapIcon
+} from "lucide-react";
 import "../styles/DegreePlanner.css";
 
+const STATUS_OPTIONS  = ["Not Started","In Progress","Completed","Transferred","Waived"];
+const CATEGORY_OPTIONS = ["Core","Major","Minor","Elective","Graduate","Certificate"];
+
+const STATUS_COLORS = {
+  "Completed":   { bg:"rgb(254, 8, 8)",  text:"#000000",  border:"rgba(16,185,129,0.25)" },
+  "Transferred": { bg:"rgb(255, 210, 8)",  text:"#000101",  border:"rgba(20,184,166,0.25)" },
+  "In Progress": { bg:"rgb(5, 255, 13)",  text:"#000000",  border:"rgba(59,130,246,0.25)" },
+  "Not Started": { bg:"rgb(3, 255, 171)", text:"#232323",  border:"rgba(255,255,255,0.1)" },
+  "Waived":      { bg:"rgba(168,85,247,0.12)",  text:"#000000",  border:"rgba(168,85,247,0.25)" },
+};
+
+const DEFAULT_CORE_CATS = [
+  { id:"010", name:"Communication",              credits:6 },
+  { id:"020", name:"Mathematics",                credits:3 },
+  { id:"030", name:"Life & Physical Sciences",   credits:6 },
+  { id:"040", name:"Language, Philosophy & Culture", credits:3 },
+  { id:"050", name:"Creative Arts",              credits:3 },
+  { id:"060", name:"American History",           credits:6 },
+  { id:"070", name:"Government / Political Science", credits:6 },
+  { id:"080", name:"Social & Behavioral Sciences", credits:3 },
+  { id:"090", name:"Component Area Option",      credits:6 },
+];
+
+const TABS = [
+  { key:"overview",   label:"Overview",        Icon: TrendingUp  },
+  { key:"semesters",  label:"Semesters",       Icon: Layers      },
+  { key:"future",     label:"Plan Ahead",      Icon: MapIcon     },
+  { key:"core",       label:"Core",            Icon: BookOpen    },
+  { key:"major",      label:"Major",           Icon: GraduationCap },
+  { key:"minor",      label:"Minor",           Icon: CheckCircle },
+];
+
 export default function DegreePlanner() {
-  const [user, setUser] = useState(null);
-  const [userProfile, setUserProfile] = useState(null);
+  const [user, setUser]               = useState(null);
+  const [profile, setProfile]         = useState(null);
   const [currentClasses, setCurrentClasses] = useState([]);
-  const [semesters, setSemesters] = useState([]);
-  const [coreReqs, setCoreReqs] = useState([]);
-  const [majorReqs, setMajorReqs] = useState([]);
-  const [minorReqs, setMinorReqs] = useState([]);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [semesterToDelete, setSemesterToDelete] = useState(null);
-  const [degreeSettings, setDegreeSettings] = useState(null);
-  const [activeTab, setActiveTab] = useState("semesters");
-  const [isSemesterDialogOpen, setIsSemesterDialogOpen] = useState(false);
-  const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false);
-  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
-  const [selectedSemester, setSelectedSemester] = useState(null);
-  const [semesterData, setSemesterData] = useState({ name: "" });
-  const [courseData, setCourseData] = useState({
-    course_code: "",
-    course_name: "",
-    credit_hours: 3,
-    category: "Major",
-    core_category: "",
-    status: "Not Started"
+  const [semesters, setSemesters]     = useState([]);
+  const [coreReqs, setCoreReqs]       = useState([]);
+  const [majorReqs, setMajorReqs]     = useState([]);
+  const [minorReqs, setMinorReqs]     = useState([]);
+  const [degreeSettings, setDegreeSettings] = useState({
+    totalCredits: 120, minorName:"Minor",
+    minorCredits: 18, coreCategories: DEFAULT_CORE_CATS,
+  });
+  const [activeTab, setActiveTab]     = useState("overview");
+  const [expandedSems, setExpandedSems] = useState({});
+
+  /* Modals */
+  const [semModal,     setSemModal]     = useState(false);
+  const [courseModal,  setCourseModal]  = useState(null); // semesterId or "future"
+  const [deleteTarget, setDeleteTarget] = useState(null); // { type, id, semId? }
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [reqModal,     setReqModal]     = useState(null); // "core" | "major" | "minor"
+
+  const [semName, setSemName]   = useState("");
+  const [courseForm, setCourseForm] = useState({
+    course_code:"", course_name:"", credit_hours:3,
+    category:"Major", core_category:"", status:"Not Started", notes:""
+  });
+  const [reqForm, setReqForm] = useState({
+    course_code:"", course_name:"", credit_hours:3,
+    core_category:"", status:"Not Started"
   });
 
-  const statusOptions = ["Not Started", "In Progress", "Completed", "Transferred"];
-  const categoryOptions = ["Core", "Major", "Minor", "Elective"];
-
-  const defaultCoreCategories = [
-    { id: "010", name: "Communication", credits: 6 },
-    { id: "020", name: "Mathematics", credits: 3 },
-    { id: "030", name: "Life & Physical Sciences", credits: 6 },
-    { id: "040", name: "Language, Philosophy & Culture", credits: 3 },
-    { id: "050", name: "Creative Arts", credits: 3 },
-    { id: "060", name: "American History", credits: 6 },
-    { id: "070", name: "Government/Political Science", credits: 6 },
-    { id: "080", name: "Social & Behavioral Sciences", credits: 3 },
-    { id: "090", name: "Component Area Option", credits: 6 }
-  ];
-
-  const [coreCategories, setCoreCategories] = useState(defaultCoreCategories);
-
+  /* ── Auth ── */
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (currentUser) => setUser(currentUser));
+    const unsub = onAuthStateChanged(auth, u => setUser(u));
     return () => unsub();
   }, []);
 
+  /* ── Firestore listeners ── */
   useEffect(() => {
     if (!user) return;
-    const loadData = async () => {
-      const profileDoc = await getDoc(doc(db, "users", user.uid));
-      if (profileDoc.exists()) setUserProfile(profileDoc.data());
+    const uid = user.uid;
+    const subs = [];
 
-      const settingsDoc = await getDoc(doc(db, "degreeSettings", user.uid));
-      if (settingsDoc.exists()) {
-        setDegreeSettings(settingsDoc.data());
-        if (settingsDoc.data().coreCategories) {
-          setCoreCategories(settingsDoc.data().coreCategories);
-        }
+    subs.push(onSnapshot(doc(db,"users",uid), s => {
+      if (s.exists()) setProfile(s.data());
+    }));
+
+    const loadSettings = async () => {
+      const snap = await getDoc(doc(db,"degreeSettings",uid));
+      if (snap.exists()) {
+        setDegreeSettings(prev => ({ ...prev, ...snap.data() }));
       }
     };
-    loadData();
+    loadSettings();
+
+    subs.push(onSnapshot(
+      query(collection(db,"classes"), where("uid","==",uid), where("is_active","==",true)),
+      s => setCurrentClasses(s.docs.map(d=>({id:d.id,...d.data()})))
+    ));
+    subs.push(onSnapshot(
+      query(collection(db,"degreeSemesters"), where("uid","==",uid)),
+      s => setSemesters(s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order||0)-(b.order||0)))
+    ));
+    subs.push(onSnapshot(
+      query(collection(db,"coreRequirements"), where("uid","==",uid)),
+      s => setCoreReqs(s.docs.map(d=>({id:d.id,...d.data()})))
+    ));
+    subs.push(onSnapshot(
+      query(collection(db,"majorRequirements"), where("uid","==",uid)),
+      s => setMajorReqs(s.docs.map(d=>({id:d.id,...d.data()})))
+    ));
+    subs.push(onSnapshot(
+      query(collection(db,"minorRequirements"), where("uid","==",uid)),
+      s => setMinorReqs(s.docs.map(d=>({id:d.id,...d.data()})))
+    ));
+
+    return () => subs.forEach(u => u());
   }, [user]);
 
+  /* Auto-expand first semester */
   useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, "classes"), where("uid", "==", user.uid), where("is_active", "==", true));
-    const unsub = onSnapshot(q, (snapshot) => {
-      setCurrentClasses(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+    if (semesters.length && Object.keys(expandedSems).length === 0) {
+      setExpandedSems({ [semesters[0].id]: true });
+    }
+  }, [semesters]);
+
+  /* ── Progress calculations ── */
+  const progress = useMemo(() => {
+    const req = Number(profile?.degree_credit_requirement || degreeSettings.totalCredits || 120);
+    const done = new Map();
+    const addCredit = (code, cr) => { if (!done.has(code)) done.set(code, Number(cr)||0); };
+
+    // From requirement collections
+    [...coreReqs,...majorReqs,...minorReqs].forEach(c => {
+      if (c.status==="Completed"||c.status==="Transferred"||c.is_completed)
+        addCredit(c.course_code+"-req", c.credit_hours);
     });
-    return () => unsub();
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, "degreeSemesters"), where("uid", "==", user.uid));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      setSemesters(data.sort((a, b) => (a.order || 0) - (b.order || 0)));
-    });
-    return () => unsub();
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, "coreRequirements"), where("uid", "==", user.uid));
-    const unsub = onSnapshot(q, (snapshot) => setCoreReqs(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))));
-    return () => unsub();
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, "majorRequirements"), where("uid", "==", user.uid));
-    const unsub = onSnapshot(q, (snapshot) => setMajorReqs(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))));
-    return () => unsub();
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, "minorRequirements"), where("uid", "==", user.uid));
-    const unsub = onSnapshot(q, (snapshot) => setMinorReqs(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))));
-    return () => unsub();
-  }, [user]);
-
-  const saveCoreCategories = async (newCategories) => {
-    setCoreCategories(newCategories);
-    await setDoc(doc(db, "degreeSettings", user.uid), {
-      ...degreeSettings,
-      coreCategories: newCategories
-    }, { merge: true });
-  };
-
-  const updateCoreCategory = (categoryId, field, value) => {
-    const updated = coreCategories.map(cat =>
-      cat.id === categoryId ? { ...cat, [field]: field === 'credits' ? Number(value) : value } : cat
-    );
-    saveCoreCategories(updated);
-  };
-
-  // Get core courses from all sources - current classes, manual entries, AND semester courses
-  const getCoreCoursesForCategory = (categoryName) => {
-    // From current classes
-    const fromCurrentClasses = currentClasses.filter(c => 
-      c.category === "Core" && c.core_category === categoryName
-    );
-    
-    // From manual entries
-    const fromManual = coreReqs.filter(c => c.category === categoryName);
-    
-    // From semester courses that are Core category
-    const fromSemesters = semesters.flatMap(sem => 
-      (sem.courses || [])
-        .filter(c => c.category === "Core" && c.core_category === categoryName)
-        .map(c => ({ ...c, source: 'semester', semesterName: sem.name }))
-    );
-    
-    return [
-      ...fromCurrentClasses.map(c => ({ ...c, source: 'class' })),
-      ...fromManual.map(c => ({ ...c, source: 'manual' })),
-      ...fromSemesters
-    ];
-  };
-
-  // Get major courses from all sources
-  const getMajorCourses = () => {
-    const fromCurrentClasses = currentClasses.filter(c => c.category === "Major");
-    const fromManual = majorReqs;
-    
-    // From semester courses that are Major category
-    const fromSemesters = semesters.flatMap(sem => 
-      (sem.courses || [])
-        .filter(c => c.category === "Major")
-        .map(c => ({ ...c, source: 'semester', semesterName: sem.name }))
-    );
-    
-    return [
-      ...fromCurrentClasses.map(c => ({ ...c, source: 'class' })),
-      ...fromManual.map(c => ({ ...c, source: 'manual' })),
-      ...fromSemesters
-    ];
-  };
-
-  // Get minor courses from all sources
-  const getMinorCourses = () => {
-    const fromCurrentClasses = currentClasses.filter(c => c.category === "Minor");
-    const fromManual = minorReqs;
-    
-    // From semester courses that are Minor category
-    const fromSemesters = semesters.flatMap(sem => 
-      (sem.courses || [])
-        .filter(c => c.category === "Minor")
-        .map(c => ({ ...c, source: 'semester', semesterName: sem.name }))
-    );
-    
-    return [
-      ...fromCurrentClasses.map(c => ({ ...c, source: 'class' })),
-      ...fromManual.map(c => ({ ...c, source: 'manual' })),
-      ...fromSemesters
-    ];
-  };
-
-  // Calculate overall progress - FIXED to avoid any double counting
-  const calculateProgress = () => {
-    const totalRequired = userProfile?.degree_credit_requirement || 120;
-    
-    // Get all unique completed courses from all sources
-    const completedCourses = new Map(); // Use Map to avoid duplicates by course_code
-    const transferredCourses = new Map(); // separate map for transferred credits
-
-    // Helper to add to a map without duplicating
-    const addToMap = (map, key, credits) => {
-      if (!map.has(key)) map.set(key, credits || 0);
-    };
-
-    // 1. Manual core requirements
-    coreReqs.forEach(c => {
-      const key = `${c.course_code}-core`;
-      if (c.status === 'Transferred' || c.is_transfer) {
-        addToMap(transferredCourses, key, c.credit_hours);
-      } else if (c.status === 'Completed') {
-        addToMap(completedCourses, key, c.credit_hours);
-      }
-    });
-
-    // 2. Manual major requirements
-    majorReqs.forEach(c => {
-      const key = `${c.course_code}-major`;
-      if (c.is_transfer || c.status === 'Transferred') {
-        addToMap(transferredCourses, key, c.credit_hours);
-      } else if (c.is_completed) {
-        addToMap(completedCourses, key, c.credit_hours);
-      }
-    });
-
-    // 3. Manual minor requirements
-    minorReqs.forEach(c => {
-      const key = `${c.course_code}-minor`;
-      if (c.is_transfer || c.status === 'Transferred') {
-        addToMap(transferredCourses, key, c.credit_hours);
-      } else if (c.is_completed) {
-        addToMap(completedCourses, key, c.credit_hours);
-      }
-    });
-
-    // 4. Semester courses
-    semesters.forEach(sem => {
-      (sem.courses || []).forEach(c => {
-        const key = `${c.course_code}-semester`;
-        if (c.status === 'Transferred' || c.is_transfer) {
-          addToMap(transferredCourses, key, c.credit_hours);
-        } else if (c.status === 'Completed') {
-          addToMap(completedCourses, key, c.credit_hours);
-        }
-      });
-    });
-
-    // 5. Current classes (some may be completed in DB)
+    // From planned semesters
+    semesters.forEach(s => (s.courses||[]).forEach(c => {
+      if (c.status==="Completed"||c.status==="Transferred")
+        addCredit(c.course_code+"-sem-"+s.id, c.credit_hours);
+    }));
+    // In progress
+    const inProg = new Map();
     currentClasses.forEach(c => {
-      const key = `${c.course_code}-current`;
-      if (c.is_transfer || c.status === 'Transferred') {
-        addToMap(transferredCourses, key, c.credit_hours);
-      } else if (c.is_completed || c.status === 'Completed') {
-        addToMap(completedCourses, key, c.credit_hours);
-      }
+      if (!inProg.has(c.course_code)) inProg.set(c.course_code, Number(c.credit_hours)||0);
     });
+    semesters.forEach(s => (s.courses||[]).forEach(c => {
+      if (c.status==="In Progress") inProg.set(c.course_code+s.id, Number(c.credit_hours)||0);
+    }));
 
-    // Sum all completed credits (no duplicates)
-    const completedFromCourses = Array.from(completedCourses.values()).reduce((sum, credits) => sum + credits, 0);
-
-    // Sum transferred credits from course entries
-    const transferredFromCourses = Array.from(transferredCourses.values()).reduce((sum, credits) => sum + credits, 0);
-
-    // If the user added explicit transferred courses in planner, prefer that total
-    // to avoid double-counting with the profile's `completed_credit_hours` field.
-    const profileTransferred = Number(userProfile?.completed_credit_hours || 0);
-    const transferredCredits = transferredFromCourses > 0 ? transferredFromCourses : profileTransferred;
-
-    // In progress courses
-    const inProgressCourses = new Map();
-    
-    // Current classes (always in progress)
-    currentClasses.forEach(cls => {
-      const key = `${cls.course_code}-current`;
-      if (!inProgressCourses.has(key)) {
-        inProgressCourses.set(key, cls.credit_hours || 0);
-      }
-    });
-
-    // In progress from semesters
-    semesters.forEach(sem => {
-      (sem.courses || [])
-        .filter(c => c.status === "In Progress" || c.status === "Not Started")
-        .forEach(c => {
-          const key = `${c.course_code}-semester-progress`;
-          if (!inProgressCourses.has(key)) {
-            inProgressCourses.set(key, c.credit_hours || 0);
-          }
-        });
-    });
-
-    const totalInProgress = Array.from(inProgressCourses.values()).reduce((sum, credits) => sum + credits, 0);
-    
-    const combinedCompleted = transferredCredits + completedFromCourses;
-    const remaining = Math.max(0, totalRequired - combinedCompleted - totalInProgress);
-    const percentage = Math.min((combinedCompleted / totalRequired) * 100, 100);
-
+    const completedCr = Array.from(done.values()).reduce((a,b)=>a+b,0);
+    const profileXfer = Number(profile?.completed_credit_hours||0);
+    const transferred = profileXfer;
+    const combined    = completedCr + transferred;
+    const inProgCr    = Array.from(inProg.values()).reduce((a,b)=>a+b,0);
+    const remaining   = Math.max(0, req - combined - inProgCr);
     return {
-      completedCredits: completedFromCourses,
-      transferredCredits,
-      combinedCompleted,
-      inProgressCredits: totalInProgress,
-      remaining,
-      totalRequired,
-      percentage
+      completedCr, transferred, combined, inProgCr, remaining,
+      req, pct: Math.min((combined/req)*100,100)
     };
+  }, [coreReqs, majorReqs, minorReqs, semesters, currentClasses, profile, degreeSettings]);
+
+  /* Core category helpers */
+  const coreCats = degreeSettings.coreCategories || DEFAULT_CORE_CATS;
+  const getCoreForCat = catName => {
+    const fromCurrent  = currentClasses.filter(c=>c.category==="Core"&&c.core_category===catName).map(c=>({...c,source:"current"}));
+    const fromManual   = coreReqs.filter(c=>c.category===catName).map(c=>({...c,source:"manual"}));
+    const fromSems     = semesters.flatMap(s=>(s.courses||[]).filter(c=>c.category==="Core"&&c.core_category===catName).map(c=>({...c,source:"semester",semName:s.name})));
+    return [...fromCurrent,...fromManual,...fromSems];
   };
 
-  // Calculate minor progress
-  const calculateMinorProgress = () => {
-    const minorSettings = degreeSettings?.minorCreditsRequired || 18;
-    
-    // Completed from manual minor requirements
-    const completedMinorCredits = minorReqs
-      .filter(c => c.is_completed)
-      .reduce((sum, c) => sum + (c.credit_hours || 0), 0);
-
-    // In progress from current classes
-    const inProgressMinor = currentClasses
-      .filter(c => c.category === "Minor")
-      .reduce((sum, c) => sum + (c.credit_hours || 0), 0);
-
-    const percentage = Math.min((completedMinorCredits / minorSettings) * 100, 100);
-
-    return {
-      completed: completedMinorCredits,
-      inProgress: inProgressMinor,
-      required: minorSettings,
-      percentage
-    };
+  const getMajorCourses = () => {
+    const fromCurrent = currentClasses.filter(c=>c.category==="Major").map(c=>({...c,source:"current"}));
+    const fromManual  = majorReqs.map(c=>({...c,source:"manual"}));
+    const fromSems    = semesters.flatMap(s=>(s.courses||[]).filter(c=>c.category==="Major").map(c=>({...c,source:"semester",semName:s.name})));
+    return [...fromCurrent,...fromManual,...fromSems];
   };
 
-  const handleAddSemester = async (e) => {
+  const getMinorCourses = () => {
+    const fromCurrent = currentClasses.filter(c=>c.category==="Minor").map(c=>({...c,source:"current"}));
+    const fromManual  = minorReqs.map(c=>({...c,source:"manual"}));
+    const fromSems    = semesters.flatMap(s=>(s.courses||[]).filter(c=>c.category==="Minor").map(c=>({...c,source:"semester",semName:s.name})));
+    return [...fromCurrent,...fromManual,...fromSems];
+  };
+
+  /* Future courses = semester courses with status Not Started */
+  const futureCourses = useMemo(() =>
+    semesters.flatMap(s =>
+      (s.courses||[]).filter(c=>c.status==="Not Started"||c.status==="In Progress")
+        .map(c=>({...c,semName:s.name,semId:s.id}))
+    )
+  , [semesters]);
+
+  /* ── Save settings ── */
+  const saveSettings = async (updated) => {
+    const merged = { ...degreeSettings, ...updated };
+    setDegreeSettings(merged);
+    await setDoc(doc(db,"degreeSettings",user.uid), merged, {merge:true});
+  };
+
+  /* ── Semester CRUD ── */
+  const addSemester = async e => {
     e.preventDefault();
-    await addDoc(collection(db, "degreeSemesters"), {
-      ...semesterData,
-      uid: user.uid,
-      courses: [],
-      order: semesters.length + 1
+    if (!semName.trim()) return;
+    const newDoc = await addDoc(collection(db,"degreeSemesters"),{
+      name:semName.trim(), uid:user.uid, courses:[], order:semesters.length+1
     });
-    setIsSemesterDialogOpen(false);
-    setSemesterData({ name: "" });
+    setExpandedSems(p=>({...p,[newDoc.id]:true}));
+    setSemModal(false); setSemName("");
   };
 
-  const triggerDeleteSemester = (semester) => {
-  setSemesterToDelete(semester);
-  setIsDeleteDialogOpen(true);
-};
+  const deleteSemester = async id => {
+    await deleteDoc(doc(db,"degreeSemesters",id));
+    setDeleteTarget(null);
+  };
 
-const handleConfirmDeleteSemester = async () => {
-  if (!semesterToDelete) return;
-  try {
-    await deleteDoc(doc(db, "degreeSemesters", semesterToDelete.id));
-    setIsDeleteDialogOpen(false);
-    setSemesterToDelete(null);
-  } catch (error) {
-    console.error("Error deleting semester:", error);
-  }
-};
-
-  // Add course ONLY to semester (not to requirement collections)
-  const handleAddCourseToSemester = async (e) => {
+  /* ── Course in semester CRUD ── */
+  const addCourseToSemester = async e => {
     e.preventDefault();
-    const semester = semesters.find(s => s.id === selectedSemester);
-    if (!semester) return;
-
-    const newCourse = {
-      ...courseData,
-      id: Date.now().toString()
-    };
-
-    const updatedCourses = [...(semester.courses || []), newCourse];
-    await updateDoc(doc(db, "degreeSemesters", selectedSemester), {
-      courses: updatedCourses
+    const semId = courseModal;
+    if (!semId || semId==="future") return;
+    const sem = semesters.find(s=>s.id===semId);
+    if (!sem) return;
+    const newCourse = { ...courseForm, id: Date.now().toString() };
+    await updateDoc(doc(db,"degreeSemesters",semId),{
+      courses:[...(sem.courses||[]),newCourse]
     });
+    setCourseModal(null);
+    setCourseForm({course_code:"",course_name:"",credit_hours:3,category:"Major",core_category:"",status:"Not Started",notes:""});
+  };
 
-    setIsCourseDialogOpen(false);
-    setCourseData({
-      course_code: "",
-      course_name: "",
-      credit_hours: 3,
-      category: "Major",
-      core_category: "",
-      status: "Not Started"
+  const updateSemCourse = async (semId, courseId, field, value) => {
+    const sem = semesters.find(s=>s.id===semId);
+    if (!sem) return;
+    await updateDoc(doc(db,"degreeSemesters",semId),{
+      courses: sem.courses.map(c => c.id===courseId ? {...c,[field]:value} : c)
     });
   };
 
-  const handleUpdateSemesterCourse = async (semesterId, courseId, field, value) => {
-    const semester = semesters.find(s => s.id === semesterId);
-    if (!semester) return;
+  const deleteSemCourse = async (semId, courseId) => {
+    const sem = semesters.find(s=>s.id===semId);
+    if (!sem) return;
+    await updateDoc(doc(db,"degreeSemesters",semId),{
+      courses: sem.courses.filter(c=>c.id!==courseId)
+    });
+    setDeleteTarget(null);
+  };
 
-    const updatedCourses = semester.courses.map(c =>
-      c.id === courseId ? { ...c, [field]: value } : c
+  /* ── Requirement CRUD ── */
+  const addRequirement = async e => {
+    e.preventDefault();
+    const colName = reqModal==="core"?"coreRequirements": reqModal==="major"?"majorRequirements":"minorRequirements";
+    await addDoc(collection(db,colName),{
+      ...reqForm,
+      category: reqModal==="core" ? reqForm.core_category : (reqModal==="major"?"Major":"Minor"),
+      uid:user.uid
+    });
+    setReqModal(null);
+    setReqForm({course_code:"",course_name:"",credit_hours:3,core_category:"",status:"Not Started"});
+  };
+
+  const updateReq = async (type, id, field, value) => {
+    const col = type==="core"?"coreRequirements": type==="major"?"majorRequirements":"minorRequirements";
+    await updateDoc(doc(db,col,id),{[field]:value});
+  };
+
+  const deleteReq = async (type, id) => {
+    const col = type==="core"?"coreRequirements": type==="major"?"majorRequirements":"minorRequirements";
+    await deleteDoc(doc(db,col,id));
+    setDeleteTarget(null);
+  };
+
+  /* ── Helpers ── */
+  const statusPill = (status) => {
+    const s = STATUS_COLORS[status] || STATUS_COLORS["Not Started"];
+    return (
+      <span className="dp-status-pill" style={{background:s.bg,color:s.text,border:`1px solid ${s.border}`}}>
+        {status}
+      </span>
     );
-
-    await updateDoc(doc(db, "degreeSemesters", semesterId), {
-      courses: updatedCourses
-    });
   };
 
-  const handleDeleteSemesterCourse = async (semesterId, courseId) => {
-    const semester = semesters.find(s => s.id === semesterId);
-    if (!semester) return;
+  const semesterCredits = sem =>
+    (sem.courses||[]).reduce((s,c)=>s+Number(c.credit_hours||0),0);
 
-    const updatedCourses = semester.courses.filter(c => c.id !== courseId);
-    await updateDoc(doc(db, "degreeSemesters", semesterId), {
-      courses: updatedCourses
-    });
-  };
-
-  // Core CRUD
-  const handleUpdateCore = async (coreId, field, value) => {
-    await updateDoc(doc(db, "coreRequirements", coreId), { [field]: value });
-  };
-
-  const handleDeleteCore = async (id) => {
-    await deleteDoc(doc(db, "coreRequirements", id));
-  };
-
-  // Major CRUD
-  const handleUpdateMajor = async (majorId, field, value) => {
-    await updateDoc(doc(db, "majorRequirements", majorId), { [field]: value });
-  };
-
-  const handleDeleteMajor = async (id) => {
-    await deleteDoc(doc(db, "majorRequirements", id));
-  };
-
-  // Minor CRUD
-  const handleUpdateMinor = async (minorId, field, value) => {
-    await updateDoc(doc(db, "minorRequirements", minorId), { [field]: value });
-  };
-
-  const handleDeleteMinor = async (id) => {
-    await deleteDoc(doc(db, "minorRequirements", id));
-  };
-
-  const handleSaveSettings = async (e) => {
-    e.preventDefault();
-    await setDoc(doc(db, "degreeSettings", user.uid), degreeSettings, { merge: true });
-    setIsSettingsDialogOpen(false);
-  };
-
-  const progress = calculateProgress();
-  const minorProgress = calculateMinorProgress();
-
-  if (!user) {
-    return <div className="empty-state">Please sign in to view degree planner</div>;
-  }
+  if (!user) return <div className="dp-signin">Please sign in to view Degree Planner</div>;
 
   return (
-    <div className="degree-planner-container">
-      <div className="degree-planner-header">
+    <div className="degree-planner">
+      {/* ── Header ── */}
+      <div className="dp-header">
         <div>
           <h1>Degree Planner</h1>
-          <p>Plan your academic journey</p>
+          <p>Plan your full academic journey from now to graduation</p>
         </div>
-        <button className="btn-settings" onClick={() => setIsSettingsDialogOpen(true)}>⚙️ Settings</button>
+        <button className="btn btn-ghost" onClick={()=>setSettingsOpen(true)}>
+          <Settings size={16}/> Settings
+        </button>
       </div>
 
-      {/* Summary Cards */}
-      <div className="summary-section">
-        <h2>Degree Progress</h2>
-        <div className="summary-cards">
-          <div className="summary-card">
-            <span className="summary-value">{progress.completedCredits}</span>
-            <span className="summary-label">Completed</span>
+      {/* ── Progress Hero ── */}
+      <div className="dp-progress-hero stagger-1">
+        <div className="dp-progress-stats">
+          <div className="dp-pstat">
+            <span className="dp-pstat-val">{progress.combined}</span>
+            <span className="dp-pstat-label">Completed cr.</span>
           </div>
-          <div className="summary-card green">
-            <span className="summary-value">{progress.transferredCredits}</span>
-            <span className="summary-label">Transferred</span>
+          <div className="dp-pstat blue">
+            <span className="dp-pstat-val">{progress.inProgCr}</span>
+            <span className="dp-pstat-label">In Progress</span>
           </div>
-          <div className="summary-card blue">
-            <span className="summary-value">{progress.inProgressCredits}</span>
-            <span className="summary-label">In Progress</span>
+          <div className="dp-pstat amber">
+            <span className="dp-pstat-val">{progress.remaining}</span>
+            <span className="dp-pstat-label">Remaining</span>
           </div>
-          <div className="summary-card red">
-            <span className="summary-value">{progress.remaining}</span>
-            <span className="summary-label">Remaining</span>
+          <div className="dp-pstat teal">
+            <span className="dp-pstat-val">{progress.transferred}</span>
+            <span className="dp-pstat-label">Transferred</span>
           </div>
         </div>
-          <div className="progress-section">
-          <span className="progress-label">Overall: {progress.combinedCompleted}/{progress.totalRequired}</span>
-          <div className="progress-bar-container">
-            <div className="progress-bar-fill" style={{ width: `${progress.percentage}%` }}></div>
+        <div className="dp-progress-bar-wrap">
+          <div className="dp-progress-labels">
+            <span>{progress.combined}/{progress.req} credits</span>
+            <span className="dp-pct">{progress.pct.toFixed(1)}%</span>
           </div>
-          <span className="progress-percentage">{progress.percentage.toFixed(0)}%</span>
+          <div className="dp-progress-track">
+            <div className="dp-progress-fill" style={{width:`${progress.pct}%`}}/>
+            {progress.inProgCr > 0 && (
+              <div className="dp-progress-inprog" style={{
+                width:`${Math.min((progress.inProgCr/progress.req)*100,100-(progress.pct))}%`,
+                left:`${progress.pct}%`
+              }}/>
+            )}
+          </div>
+          <div className="dp-progress-legend">
+            <span className="dp-leg green">Completed</span>
+            <span className="dp-leg blue">In Progress</span>
+          </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="tabs-container">
-        <div className="tabs-header">
-          <button className={`tab-btn ${activeTab === "semesters" ? "active" : ""}`} onClick={() => setActiveTab("semesters")}>
-             Semesters
-          </button>
-          <button className={`tab-btn ${activeTab === "core" ? "active" : ""}`} onClick={() => setActiveTab("core")}>
-             Core
-          </button>
-          <button className={`tab-btn ${activeTab === "major" ? "active" : ""}`} onClick={() => setActiveTab("major")}>
-             Major
-          </button>
-          <button className={`tab-btn ${activeTab === "minor" ? "active" : ""}`} onClick={() => setActiveTab("minor")}>
-             Minor
-          </button>
-        </div>
+      {/* ── Tabs ── */}
+      <div className="dp-tabs stagger-2">
+        {TABS.map(t => {
+          const Icon = t.Icon;
+          return (
+            <button
+              key={t.key}
+              className={"dp-tab"+(activeTab===t.key?" active":"")}
+              onClick={()=>setActiveTab(t.key)}
+            >
+              <Icon size={15}/> {t.label}
+            </button>
+          );
+        })}
+      </div>
 
-        {/* Semesters Tab */}
-        {activeTab === "semesters" && (
-          <div className="tab-content">
-            <div className="tab-header">
-              <h3>Semester Plans</h3>
-              <button className="btn-add-req" onClick={() => setIsSemesterDialogOpen(true)}>+ Add Semester</button>
-            </div>
+      {/* ═══════════════ OVERVIEW TAB ═══════════════ */}
+      {activeTab==="overview" && (
+        <div className="dp-tab-content stagger-3">
+          <div className="dp-overview-grid">
 
-            {/* Current Classes */}
+            {/* Current semester */}
             {currentClasses.length > 0 && (
-              <div className="semester-block current">
-                <div className="semester-block-header">
-                  <h3> Current Semester</h3>
-                  <span className="semester-credits">{currentClasses.reduce((sum, c) => sum + (c.credit_hours || 0), 0)} credits</span>
+              <div className="dp-overview-card">
+                <div className="dp-ov-header">
+                  <Clock size={15}/>
+                  <span>Current Semester</span>
+                  <span className="dp-ov-cr">
+                    {currentClasses.reduce((s,c)=>s+Number(c.credit_hours||0),0)} cr
+                  </span>
                 </div>
-                <div className="semester-courses-table">
-                  <div className="table-header-5">
-                    <span>Code</span>
-                    <span>Name</span>
-                    <span>Hrs</span>
-                    <span>Category</span>
-                    <span>Core Type</span>
-                  </div>
-                  {currentClasses.map(cls => (
-                    <div key={cls.id} className="table-row-5">
-                      <span className="course-code">{cls.course_code}</span>
-                      <span className="course-name">{cls.course_name}</span>
-                      <span>{cls.credit_hours}</span>
-                      <span className="category-badge">{cls.category || "Major"}</span>
-                      <span className="core-type">{cls.core_category[0] || "-"}</span>
+                <div className="dp-course-table">
+                  {currentClasses.map(cls=>(
+                    <div key={cls.id} className="dp-course-row current-row">
+                      <span className="dp-cr-code" style={{color:cls.color}}>{cls.course_code}</span>
+                      <span className="dp-cr-name">{cls.course_name}</span>
+                      <span className="dp-cr-hrs">{cls.credit_hours}cr</span>
+                      {statusPill("In Progress")}
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Planned Semesters */}
-            {semesters.map(semester => {
-              const semesterTotalCredits = (semester.courses || []).reduce((sum, c) => sum + (c.credit_hours || 0), 0);
-              return (
-                <div key={semester.id} className="semester-block">
-                  <div className="semester-block-header">
-                    <h3>{semester.name}</h3>
-                    <span className="semester-credits">{semesterTotalCredits} credits</span>
-                    <button className="btn-delete-sm" onClick={() => triggerDeleteSemester(semester)}>🗑️</button>                  </div>
-                  <div className="semester-courses-table">
-                    <div className="table-header-6">
-                      <span>Code</span>
-                      <span>Name</span>
-                      <span>Hrs</span>
-                      <span>Status</span>
-                      <span>Category</span>
-                      <span></span>
+            {/* Upcoming semesters */}
+            {semesters.filter(s=>(s.courses||[]).some(c=>c.status==="Not Started"||c.status==="In Progress")).slice(0,3).map(sem=>(
+              <div key={sem.id} className="dp-overview-card">
+                <div className="dp-ov-header">
+                  <Layers size={15}/>
+                  <span>{sem.name}</span>
+                  <span className="dp-ov-cr">{semesterCredits(sem)} cr</span>
+                </div>
+                <div className="dp-course-table">
+                  {(sem.courses||[]).filter(c=>c.status!=="Completed"&&c.status!=="Transferred").map(c=>(
+                    <div key={c.id} className="dp-course-row">
+                      <span className="dp-cr-code">{c.course_code}</span>
+                      <span className="dp-cr-name">{c.course_name}</span>
+                      <span className="dp-cr-hrs">{c.credit_hours}cr</span>
+                      {statusPill(c.status)}
                     </div>
-                    {(semester.courses || []).map(course => (
-                      <div key={course.id} className="table-row-6">
-                        <input
-                          className="table-input"
-                          value={course.course_code}
-                          onChange={(e) => handleUpdateSemesterCourse(semester.id, course.id, 'course_code', e.target.value)}
-                        />
-                        <input
-                          className="table-input wide"
-                          value={course.course_name}
-                          onChange={(e) => handleUpdateSemesterCourse(semester.id, course.id, 'course_name', e.target.value)}
-                        />
-                        <input
-                          className="table-input small"
-                          type="number"
-                          value={course.credit_hours}
-                          onChange={(e) => handleUpdateSemesterCourse(semester.id, course.id, 'credit_hours', Number(e.target.value))}
-                        />
-                        <select
-                          className="table-select"
-                          value={course.status}
-                          onChange={(e) => handleUpdateSemesterCourse(semester.id, course.id, 'status', e.target.value)}
-                        >
-                          {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                        <select
-                          className="table-select"
-                          value={course.category}
-                          onChange={(e) => handleUpdateSemesterCourse(semester.id, course.id, 'category', e.target.value)}
-                        >
-                          {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                        <button className="btn-delete-xs" onClick={() => handleDeleteSemesterCourse(semester.id, course.id)}>×</button>
-                      </div>
-                    ))}
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════ SEMESTERS TAB ═══════════════ */}
+      {activeTab==="semesters" && (
+        <div className="dp-tab-content stagger-3">
+          <div className="dp-section-actions">
+            <h3 className="dp-section-title">Planned Semesters</h3>
+            <button className="btn btn-primary" onClick={()=>setSemModal(true)}>
+              <Plus size={14}/> Add Semester
+            </button>
+          </div>
+
+          {/* Current classes block */}
+          {currentClasses.length > 0 && (
+            <div className="dp-semester-block current-sem">
+              <div className="dp-sem-header">
+                <div className="dp-sem-left">
+                  <span className="dp-sem-badge current-badge">CURRENT</span>
+                  <span className="dp-sem-name">This Semester</span>
+                </div>
+                <span className="dp-sem-cr">
+                  {currentClasses.reduce((s,c)=>s+Number(c.credit_hours||0),0)} credits
+                </span>
+              </div>
+              <div className="dp-course-table dp-table-full">
+                <div className="dp-table-head">
+                  <span>Code</span><span>Name</span><span>Cr</span>
+                  <span>Category</span><span>Status</span>
+                </div>
+                {currentClasses.map(cls=>(
+                  <div key={cls.id} className="dp-course-row">
+                    <span className="dp-cr-code" style={{color:cls.color}}>{cls.course_code}</span>
+                    <span className="dp-cr-name">{cls.course_name}</span>
+                    <span className="dp-cr-hrs">{cls.credit_hours}</span>
+                    <span className="dp-cr-cat">{cls.category||"Major"}</span>
+                    {statusPill("In Progress")}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Planned semesters */}
+          {semesters.map(sem=>{
+            const isOpen = expandedSems[sem.id] !== false;
+            const cr     = semesterCredits(sem);
+            const done   = (sem.courses||[]).filter(c=>c.status==="Completed"||c.status==="Transferred").length;
+            const total  = (sem.courses||[]).length;
+            return (
+              <div key={sem.id} className="dp-semester-block">
+                <button
+                  className="dp-sem-header dp-sem-toggle"
+                  onClick={()=>setExpandedSems(p=>({...p,[sem.id]:!p[sem.id]}))}
+                >
+                  <div className="dp-sem-left">
+                    <span className="dp-sem-name">{sem.name}</span>
+                    {total>0 && (
+                      <span className="dp-sem-progress-mini">
+                        {done}/{total} done
+                      </span>
+                    )}
+                  </div>
+                  <div className="dp-sem-right">
+                    <span className="dp-sem-cr">{cr} cr</span>
                     <button
-                      className="btn-add-course"
-                      onClick={() => {
-                        setSelectedSemester(semester.id);
-                        setIsCourseDialogOpen(true);
-                      }}
+                      className="btn-icon dp-del-sem"
+                      onClick={e=>{e.stopPropagation();setDeleteTarget({type:"semester",id:sem.id});}}
                     >
-                      + Add Course
+                      <Trash2 size={13}/>
+                    </button>
+                    {isOpen ? <ChevronUp size={15}/> : <ChevronDown size={15}/>}
+                  </div>
+                </button>
+
+                {isOpen && (
+                  <div className="dp-sem-body">
+                    {total > 0 ? (
+                      <div className="dp-course-table dp-table-editable">
+                        <div className="dp-table-head">
+                          <span>Code</span><span>Name</span><span>Cr</span>
+                          <span>Status</span><span>Category</span><span></span>
+                        </div>
+                        {(sem.courses||[]).map(c=>(
+                          <div key={c.id} className={"dp-course-row editable-row"+(c.status==="Completed"?" row-done":"")}>
+                            <input className="dp-cell-input"
+                              value={c.course_code}
+                              onChange={e=>updateSemCourse(sem.id,c.id,"course_code",e.target.value)}/>
+                            <input className="dp-cell-input wide"
+                              value={c.course_name}
+                              onChange={e=>updateSemCourse(sem.id,c.id,"course_name",e.target.value)}/>
+                            <input className="dp-cell-input narrow" type="number"
+                              value={c.credit_hours}
+                              onChange={e=>updateSemCourse(sem.id,c.id,"credit_hours",Number(e.target.value))}/>
+                            <select className="dp-cell-select"
+                              value={c.status}
+                              onChange={e=>updateSemCourse(sem.id,c.id,"status",e.target.value)}
+                              style={{color: STATUS_COLORS[c.status]?.text||"inherit"}}>
+                              {STATUS_OPTIONS.map(s=><option key={s}>{s}</option>)}
+                            </select>
+                            <select className="dp-cell-select"
+                              value={c.category}
+                              onChange={e=>updateSemCourse(sem.id,c.id,"category",e.target.value)}>
+                              {CATEGORY_OPTIONS.map(c=><option key={c}>{c}</option>)}
+                            </select>
+                            <button className="btn-icon dp-del-course"
+                              onClick={()=>setDeleteTarget({type:"semCourse",semId:sem.id,courseId:c.id})}>
+                              <Trash2 size={12}/>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="dp-empty-hint">No courses added yet</p>
+                    )}
+                    <button className="dp-add-course-btn"
+                      onClick={()=>setCourseModal(sem.id)}>
+                      <Plus size={13}/> Add Course
                     </button>
                   </div>
-                </div>
-              );
-            })}
+                )}
+              </div>
+            );
+          })}
 
-            {semesters.length === 0 && currentClasses.length === 0 && (
-              <p className="empty-message">No semesters planned yet</p>
-            )}
-          </div>
-        )}
-
-        {/* Core Tab */}
-        {activeTab === "core" && (
-          <div className="tab-content">
-            <div className="tab-header">
-              <h3>Core Curriculum</h3>
-              <span className="hint-text">Click category names or credits to edit</span>
+          {semesters.length===0 && currentClasses.length===0 && (
+            <div className="empty-state">
+              <div className="empty-state-icon">📅</div>
+              <h3>No semesters planned</h3>
+              <p>Add a semester to start planning your degree</p>
             </div>
-            {coreCategories.map(cat => {
-              const catCourses = getCoreCoursesForCategory(cat.name);
-              const completedCredits = catCourses
-                .filter(c => {
-                  if (c.source === 'class') return true; // Current classes count
-                  if (c.source === 'semester') return c.status === "Completed" || c.status === "Transferred";
-                  return c.status === "Completed" || c.status === "Transferred";
-                })
-                .reduce((sum, c) => sum + (c.credit_hours || 0), 0);
+          )}
+        </div>
+      )}
 
+      {/* ═══════════════ PLAN AHEAD TAB ═══════════════ */}
+      {activeTab==="future" && (
+        <div className="dp-tab-content stagger-3">
+          <div className="dp-section-actions">
+            <h3 className="dp-section-title">Future Course Pipeline</h3>
+            <p className="dp-section-sub">Courses marked "Not Started" across your planned semesters</p>
+          </div>
+          {futureCourses.length===0 ? (
+            <div className="empty-state">
+              <div className="empty-state-icon">🗺️</div>
+              <h3>No future courses planned</h3>
+              <p>Add semesters and mark courses "Not Started" to see them here</p>
+            </div>
+          ) : (
+            <div className="dp-future-grid">
+              {/* Group by semester */}
+              {Object.entries(
+                futureCourses.reduce((acc,c)=>{
+                  if(!acc[c.semName]) acc[c.semName]=[];
+                  acc[c.semName].push(c); return acc;
+                },{})
+              ).map(([semName,courses])=>(
+                <div key={semName} className="dp-future-group">
+                  <div className="dp-future-sem-label">
+                    <Layers size={13}/>
+                    <span>{semName}</span>
+                    <span className="dp-future-cr">
+                      {courses.reduce((s,c)=>s+Number(c.credit_hours||0),0)} cr
+                    </span>
+                  </div>
+                  {courses.map(c=>(
+                    <div key={c.id} className="dp-future-course">
+                      <div className="dp-future-left">
+                        <span className="dp-cr-code">{c.course_code}</span>
+                        <span className="dp-cr-name">{c.course_name}</span>
+                      </div>
+                      <div className="dp-future-right">
+                        <span className="dp-cr-hrs">{c.credit_hours}cr</span>
+                        {statusPill(c.status)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══════════════ CORE TAB ═══════════════ */}
+      {activeTab==="core" && (
+        <div className="dp-tab-content stagger-3">
+          <div className="dp-section-actions">
+            <h3 className="dp-section-title">Core Curriculum</h3>
+            <button className="btn btn-primary" onClick={()=>setReqModal("core")}>
+              <Plus size={14}/> Add Core Course
+            </button>
+          </div>
+          <div className="dp-core-grid">
+            {coreCats.map(cat=>{
+              const courses = getCoreForCat(cat.name);
+              const earned  = courses.filter(c=>c.source==="current"||c.status==="Completed"||c.status==="Transferred")
+                .reduce((s,c)=>s+Number(c.credit_hours||0),0);
+              const pct     = Math.min((earned/cat.credits)*100,100);
+              const done    = earned >= cat.credits;
               return (
-                <div key={cat.id} className={`core-category-block ${completedCredits >= cat.credits ? "complete" : ""}`}>
-                  <div className="core-category-header">
-                    <span className="core-id">{cat.id}</span>
-                    <input
-                      className="core-name-input"
-                      value={cat.name}
-                      onChange={(e) => updateCoreCategory(cat.id, 'name', e.target.value)}
-                      placeholder="Category Name"
-                    />
-                    <div className="core-credits-edit">
-                      <span>{completedCredits}/</span>
-                      <input
-                        type="number"
-                        className="core-credits-input"
-                        value={cat.credits}
-                        onChange={(e) => updateCoreCategory(cat.id, 'credits', e.target.value)}
-                      />
-                      <span>credits</span>
+                <div key={cat.id} className={"dp-core-cat"+(done?" cat-done":"")}>
+                  <div className="dp-core-cat-header">
+                    <div className="dp-core-cat-info">
+                      <span className="dp-core-cat-id">{cat.id}</span>
+                      <span className="dp-core-cat-name">{cat.name}</span>
+                    </div>
+                    <div className="dp-core-cat-cr">
+                      <span style={{color:done?"#34d399":"var(--text-secondary)"}}>{earned}</span>
+                      <span style={{color:"var(--text-muted)"}}>/{cat.credits} cr</span>
                     </div>
                   </div>
-                  {catCourses.length > 0 ? (
-                    <div className="core-courses">
-                      {catCourses.map((core, idx) => (
-                        <div key={`${core.id}-${idx}`} className="core-course-row">
-                          {core.source === 'class' ? (
-                            <>
-                              <span className="table-text">{core.course_code}</span>
-                              <span className="table-text wide">{core.course_name}</span>
-                              <span className="table-text small">{core.credit_hours}</span>
-                              <span className="status-badge in-progress">Current</span>
-                              <span></span>
-                            </>
-                          ) : core.source === 'semester' ? (
-                            <>
-                              <span className="table-text">{core.course_code}</span>
-                              <span className="table-text wide">{core.course_name}</span>
-                              <span className="table-text small">{core.credit_hours}</span>
-                              <span className="status-badge">{core.semesterName}</span>
-                              <span></span>
-                            </>
-                          ) : (
-                            <>
-                              <input
-                                className="table-input"
-                                value={core.course_code}
-                                onChange={(e) => handleUpdateCore(core.id, 'course_code', e.target.value)}
-                              />
-                              <input
-                                className="table-input wide"
-                                value={core.course_name}
-                                onChange={(e) => handleUpdateCore(core.id, 'course_name', e.target.value)}
-                              />
-                              <input
-                                className="table-input small"
-                                type="number"
-                                value={core.credit_hours}
-                                onChange={(e) => handleUpdateCore(core.id, 'credit_hours', Number(e.target.value))}
-                              />
-                              <select
-                                className="table-select"
-                                value={core.status || "Not Started"}
-                                onChange={(e) => handleUpdateCore(core.id, 'status', e.target.value)}
-                              >
-                                {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                              </select>
-                              <button className="btn-delete-xs" onClick={() => handleDeleteCore(core.id)}>×</button>
-                            </>
-                          )}
+                  <div className="dp-mini-progress">
+                    <div className="dp-mini-bar" style={{width:pct+"%", background:done?"#10b981":"#3b82f6"}}/>
+                  </div>
+                  {courses.length > 0 && (
+                    <div className="dp-core-courses">
+                      {courses.map((c,i)=>(
+                        <div key={i} className="dp-core-course-row">
+                          <span className="dp-cr-code">{c.course_code}</span>
+                          <span className="dp-cr-name">{c.course_name}</span>
+                          <span className="dp-cr-hrs">{c.credit_hours}cr</span>
+                          {c.source==="current"
+                            ? statusPill("In Progress")
+                            : c.source==="semester"
+                              ? <span className="dp-sem-tag">{c.semName}</span>
+                              : (
+                                <>
+                                  <select className="dp-cell-select"
+                                    value={c.status||"Not Started"}
+                                    onChange={e=>updateReq("core",c.id,"status",e.target.value)}
+                                    style={{color:STATUS_COLORS[c.status]?.text||"inherit"}}>
+                                    {STATUS_OPTIONS.map(s=><option key={s}>{s}</option>)}
+                                  </select>
+                                  <button className="btn-icon dp-del-course"
+                                    onClick={()=>setDeleteTarget({type:"core",id:c.id})}>
+                                    <Trash2 size={12}/>
+                                  </button>
+                                </>
+                              )
+                          }
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <p className="empty-hint">No courses yet</p>
                   )}
+                  {courses.length===0 && <p className="dp-empty-hint">No courses yet</p>}
                 </div>
               );
             })}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Major Tab */}
-        {activeTab === "major" && (
-          <div className="tab-content">
-            <div className="tab-header">
-              <h3>Major Requirements</h3>
-            </div>
-            {getMajorCourses().length === 0 ? (
-              <p className="empty-message">No major courses yet</p>
-            ) : (
-              <div className="courses-table">
-                <div className="table-header-5">
-                  <span>Code</span>
-                  <span>Name</span>
-                  <span>Hrs</span>
-                  <span>Status</span>
-                  <span></span>
-                </div>
-                {getMajorCourses().map((major, idx) => (
-                  <div key={`${major.id}-${idx}`} className="table-row-5">
-                    {major.source === 'class' ? (
-                      <>
-                        <span className="table-text">{major.course_code}</span>
-                        <span className="table-text wide">{major.course_name}</span>
-                        <span className="table-text small">{major.credit_hours}</span>
-                        <span className="status-badge in-progress">Current</span>
-                        <span></span>
-                      </>
-                    ) : major.source === 'semester' ? (
-                      <>
-                        <span className="table-text">{major.course_code}</span>
-                        <span className="table-text wide">{major.course_name}</span>
-                        <span className="table-text small">{major.credit_hours}</span>
-                        <span className="status-badge">{major.semesterName}</span>
-                        <span></span>
-                      </>
-                    ) : (
-                      <>
-                        <input
-                          className="table-input"
-                          value={major.course_code}
-                          onChange={(e) => handleUpdateMajor(major.id, 'course_code', e.target.value)}
-                        />
-                        <input
-                          className="table-input wide"
-                          value={major.course_name}
-                          onChange={(e) => handleUpdateMajor(major.id, 'course_name', e.target.value)}
-                        />
-                        <input
-                          className="table-input small"
-                          type="number"
-                          value={major.credit_hours}
-                          onChange={(e) => handleUpdateMajor(major.id, 'credit_hours', Number(e.target.value))}
-                        />
-                        <input
-                          type="checkbox"
-                          checked={major.is_completed || false}
-                          onChange={(e) => handleUpdateMajor(major.id, 'is_completed', e.target.checked)}
-                          className="checkbox-input"
-                        />
-                        <button className="btn-delete-xs" onClick={() => handleDeleteMajor(major.id)}>×</button>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+      {/* ═══════════════ MAJOR TAB ═══════════════ */}
+      {activeTab==="major" && (
+        <div className="dp-tab-content stagger-3">
+          <div className="dp-section-actions">
+            <h3 className="dp-section-title">Major Requirements</h3>
+            <button className="btn btn-primary" onClick={()=>setReqModal("major")}>
+              <Plus size={14}/> Add Course
+            </button>
           </div>
-        )}
-
-        {/* Minor Tab */}
-        {activeTab === "minor" && (
-          <div className="tab-content">
-            <div className="tab-header">
-              <h3>{degreeSettings?.minorName || "Minor"} Requirements</h3>
+          {getMajorCourses().length===0 ? (
+            <div className="empty-state">
+              <div className="empty-state-icon">📖</div>
+              <h3>No major courses yet</h3>
             </div>
-
-            {/* Minor Progress Bar */}
-            <div className="minor-progress-section">
-              <div className="minor-progress-header">
-                <span>Minor Progress</span>
-                <span className="minor-progress-text">
-                  {minorProgress.completed}/{minorProgress.required} credits
-                  {minorProgress.inProgress > 0 && ` (+${minorProgress.inProgress} in progress)`}
-                </span>
+          ) : (
+            <div className="dp-req-table">
+              <div className="dp-table-head">
+                <span>Code</span><span>Name</span><span>Cr</span><span>Status</span><span></span>
               </div>
-              <div className="progress-bar-container minor">
-                <div className="progress-bar-fill teal" style={{ width: `${minorProgress.percentage}%` }}></div>
-              </div>
-              <span className="progress-percentage teal">{minorProgress.percentage.toFixed(0)}%</span>
-            </div>
-
-            {getMinorCourses().length === 0 ? (
-              <p className="empty-message">No minor courses yet</p>
-            ) : (
-              <div className="courses-table">
-                <div className="table-header-5">
-                  <span>Code</span>
-                  <span>Name</span>
-                  <span>Hrs</span>
-                  <span>Completed</span>
-                  <span></span>
+              {getMajorCourses().map((c,i)=>(
+                <div key={i} className={"dp-course-row"+(c.status==="Completed"?" row-done":"")}>
+                  <span className="dp-cr-code">{c.course_code}</span>
+                  <span className="dp-cr-name">{c.course_name}</span>
+                  <span className="dp-cr-hrs">{c.credit_hours}cr</span>
+                  {c.source==="current"
+                    ? statusPill("In Progress")
+                    : c.source==="semester"
+                      ? <span className="dp-sem-tag">{c.semName}</span>
+                      : (
+                        <>
+                          <select className="dp-cell-select"
+                            value={c.status||"Not Started"}
+                            onChange={e=>updateReq("major",c.id,"status",e.target.value)}
+                            style={{color:STATUS_COLORS[c.status]?.text||"inherit"}}>
+                            {STATUS_OPTIONS.map(s=><option key={s}>{s}</option>)}
+                          </select>
+                          <button className="btn-icon dp-del-course"
+                            onClick={()=>setDeleteTarget({type:"major",id:c.id})}>
+                            <Trash2 size={12}/>
+                          </button>
+                        </>
+                      )
+                  }
                 </div>
-                {getMinorCourses().map((minor, idx) => (
-                  <div key={`${minor.id}-${idx}`} className="table-row-5">
-                    {minor.source === 'class' ? (
-                      <>
-                        <span className="table-text">{minor.course_code}</span>
-                        <span className="table-text wide">{minor.course_name}</span>
-                        <span className="table-text small">{minor.credit_hours}</span>
-                        <span className="status-badge in-progress">Current</span>
-                        <span></span>
-                      </>
-                    ) : minor.source === 'semester' ? (
-                      <>
-                        <span className="table-text">{minor.course_code}</span>
-                        <span className="table-text wide">{minor.course_name}</span>
-                        <span className="table-text small">{minor.credit_hours}</span>
-                        <span className="status-badge">{minor.semesterName}</span>
-                        <span></span>
-                      </>
-                    ) : (
-                      <>
-                        <input
-                          className="table-input"
-                          value={minor.course_code}
-                          onChange={(e) => handleUpdateMinor(minor.id, 'course_code', e.target.value)}
-                        />
-                        <input
-                          className="table-input wide"
-                          value={minor.course_name}
-                          onChange={(e) => handleUpdateMinor(minor.id, 'course_name', e.target.value)}
-                        />
-                        <input
-                          className="table-input small"
-                          type="number"
-                          value={minor.credit_hours}
-                          onChange={(e) => handleUpdateMinor(minor.id, 'credit_hours', Number(e.target.value))}
-                        />
-                        <input
-                          type="checkbox"
-                          checked={minor.is_completed || false}
-                          onChange={(e) => handleUpdateMinor(minor.id, 'is_completed', e.target.checked)}
-                          className="checkbox-input"
-                        />
-                        <button className="btn-delete-xs" onClick={() => handleDeleteMinor(minor.id)}>×</button>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* Add Semester Modal */}
-      {isSemesterDialogOpen && (
-        <div className="modal-overlay" onClick={() => setIsSemesterDialogOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>Add Semester</h2>
-            <form onSubmit={handleAddSemester}>
-              <div className="form-group">
-                <label>Semester Name *</label>
-                <input
-                  value={semesterData.name}
-                  onChange={(e) => setSemesterData({ ...semesterData, name: e.target.value })}
-                  placeholder="e.g., Fall 2025"
-                  required
-                />
+      {/* ═══════════════ MINOR TAB ═══════════════ */}
+      {activeTab==="minor" && (
+        <div className="dp-tab-content stagger-3">
+          <div className="dp-section-actions">
+            <h3 className="dp-section-title">{degreeSettings.minorName||"Minor"} Requirements</h3>
+            <button className="btn btn-primary" onClick={()=>setReqModal("minor")}>
+              <Plus size={14}/> Add Course
+            </button>
+          </div>
+          {/* Minor progress */}
+          <div className="dp-minor-progress">
+            <div className="dp-minor-prog-row">
+              <span>Progress</span>
+              <span>{getMinorCourses().filter(c=>c.status==="Completed"||c.is_completed).reduce((s,c)=>s+Number(c.credit_hours||0),0)}/{degreeSettings.minorCredits||18} cr</span>
+            </div>
+            <div className="dp-mini-progress">
+              <div className="dp-mini-bar teal" style={{
+                width: Math.min(
+                  (getMinorCourses().filter(c=>c.status==="Completed"||c.is_completed).reduce((s,c)=>s+Number(c.credit_hours||0),0)
+                    / (degreeSettings.minorCredits||18))*100, 100
+                )+"%"
+              }}/>
+            </div>
+          </div>
+          {getMinorCourses().length===0 ? (
+            <div className="empty-state">
+              <div className="empty-state-icon">📋</div>
+              <h3>No minor courses yet</h3>
+            </div>
+          ) : (
+            <div className="dp-req-table">
+              <div className="dp-table-head">
+                <span>Code</span><span>Name</span><span>Cr</span><span>Status</span><span></span>
               </div>
-              <div className="form-actions">
-                <button type="button" className="btn-secondary" onClick={() => setIsSemesterDialogOpen(false)}>Cancel</button>
-                <button type="submit" className="btn-primary">Add Semester</button>
+              {getMinorCourses().map((c,i)=>(
+                <div key={i} className={"dp-course-row"+(c.status==="Completed"?" row-done":"")}>
+                  <span className="dp-cr-code">{c.course_code}</span>
+                  <span className="dp-cr-name">{c.course_name}</span>
+                  <span className="dp-cr-hrs">{c.credit_hours}cr</span>
+                  {c.source==="current"
+                    ? statusPill("In Progress")
+                    : c.source==="semester"
+                      ? <span className="dp-sem-tag">{c.semName}</span>
+                      : (
+                        <>
+                          <select className="dp-cell-select"
+                            value={c.status||"Not Started"}
+                            onChange={e=>updateReq("minor",c.id,"status",e.target.value)}
+                            style={{color:STATUS_COLORS[c.status]?.text||"inherit"}}>
+                            {STATUS_OPTIONS.map(s=><option key={s}>{s}</option>)}
+                          </select>
+                          <button className="btn-icon dp-del-course"
+                            onClick={()=>setDeleteTarget({type:"minor",id:c.id})}>
+                            <Trash2 size={12}/>
+                          </button>
+                        </>
+                      )
+                  }
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══════════════ ADD SEMESTER MODAL ══════════════ */}
+      {semModal && (
+        <div className="modal-overlay" onClick={()=>setSemModal(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Add Semester</h2>
+              <button className="btn-icon" onClick={()=>setSemModal(false)}>✕</button>
+            </div>
+            <form onSubmit={addSemester}>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label>Semester Name *</label>
+                  <input className="form-control" placeholder="e.g. Fall 2025"
+                    value={semName} onChange={e=>setSemName(e.target.value)} required autoFocus/>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={()=>setSemModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Add Semester</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Add Course Modal */}
-      {isCourseDialogOpen && (
-        <div className="modal-overlay" onClick={() => setIsCourseDialogOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>Add Course</h2>
-            <form onSubmit={handleAddCourseToSemester}>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Course Code *</label>
-                  <input
-                    value={courseData.course_code}
-                    onChange={(e) => setCourseData({ ...courseData, course_code: e.target.value })}
-                    placeholder="CS 3345"
-                    required
-                  />
+      {/* ══════════════ ADD COURSE TO SEMESTER MODAL ══════════════ */}
+      {courseModal && (
+        <div className="modal-overlay" onClick={()=>setCourseModal(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Add Course</h2>
+              <button className="btn-icon" onClick={()=>setCourseModal(null)}>✕</button>
+            </div>
+            <form onSubmit={addCourseToSemester}>
+              <div className="modal-body dp-course-form">
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Course Code *</label>
+                    <input className="form-control" placeholder="CS 3345"
+                      value={courseForm.course_code}
+                      onChange={e=>setCourseForm(f=>({...f,course_code:e.target.value}))} required/>
+                  </div>
+                  <div className="form-group">
+                    <label>Credit Hours</label>
+                    <input type="number" min="0" max="12" className="form-control"
+                      value={courseForm.credit_hours}
+                      onChange={e=>setCourseForm(f=>({...f,credit_hours:Number(e.target.value)}))}/>
+                  </div>
                 </div>
                 <div className="form-group">
-                  <label>Credit Hours</label>
-                  <input
-                    type="number"
-                    value={courseData.credit_hours}
-                    onChange={(e) => setCourseData({ ...courseData, credit_hours: Number(e.target.value) })}
-                  />
+                  <label>Course Name *</label>
+                  <input className="form-control" placeholder="Data Structures"
+                    value={courseForm.course_name}
+                    onChange={e=>setCourseForm(f=>({...f,course_name:e.target.value}))} required/>
                 </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Category</label>
+                    <select className="form-control" value={courseForm.category}
+                      onChange={e=>setCourseForm(f=>({...f,category:e.target.value}))}>
+                      {CATEGORY_OPTIONS.map(c=><option key={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Status</label>
+                    <select className="form-control" value={courseForm.status}
+                      onChange={e=>setCourseForm(f=>({...f,status:e.target.value}))}>
+                      {STATUS_OPTIONS.map(s=><option key={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {courseForm.category==="Core" && (
+                  <div className="form-group">
+                    <label>Core Category</label>
+                    <select className="form-control" value={courseForm.core_category}
+                      onChange={e=>setCourseForm(f=>({...f,core_category:e.target.value}))}>
+                      <option value="">— Select —</option>
+                      {coreCats.map(cat=><option key={cat.id} value={cat.name}>{cat.id} {cat.name}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
-              <div className="form-group">
-                <label>Course Name *</label>
-                <input
-                  value={courseData.course_name}
-                  onChange={(e) => setCourseData({ ...courseData, course_name: e.target.value })}
-                  placeholder="Data Structures"
-                  required
-                />
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={()=>setCourseModal(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Add Course</button>
               </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Category</label>
-                  <select
-                    value={courseData.category}
-                    onChange={(e) => setCourseData({ ...courseData, category: e.target.value, core_category: "" })}
-                  >
-                    {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════ ADD REQUIREMENT MODAL ══════════════ */}
+      {reqModal && (
+        <div className="modal-overlay" onClick={()=>setReqModal(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Add {reqModal==="core"?"Core":reqModal==="major"?"Major":"Minor"} Course</h2>
+              <button className="btn-icon" onClick={()=>setReqModal(null)}>✕</button>
+            </div>
+            <form onSubmit={addRequirement}>
+              <div className="modal-body dp-course-form">
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Course Code *</label>
+                    <input className="form-control" placeholder="e.g. COMM 1301"
+                      value={reqForm.course_code}
+                      onChange={e=>setReqForm(f=>({...f,course_code:e.target.value}))} required/>
+                  </div>
+                  <div className="form-group">
+                    <label>Credits</label>
+                    <input type="number" min="0" className="form-control"
+                      value={reqForm.credit_hours}
+                      onChange={e=>setReqForm(f=>({...f,credit_hours:Number(e.target.value)}))}/>
+                  </div>
                 </div>
+                <div className="form-group">
+                  <label>Course Name *</label>
+                  <input className="form-control" placeholder="Course name"
+                    value={reqForm.course_name}
+                    onChange={e=>setReqForm(f=>({...f,course_name:e.target.value}))} required/>
+                </div>
+                {reqModal==="core" && (
+                  <div className="form-group">
+                    <label>Core Category *</label>
+                    <select className="form-control" value={reqForm.core_category}
+                      onChange={e=>setReqForm(f=>({...f,core_category:e.target.value}))} required>
+                      <option value="">— Select —</option>
+                      {coreCats.map(cat=><option key={cat.id} value={cat.name}>{cat.id} {cat.name}</option>)}
+                    </select>
+                  </div>
+                )}
                 <div className="form-group">
                   <label>Status</label>
-                  <select
-                    value={courseData.status}
-                    onChange={(e) => setCourseData({ ...courseData, status: e.target.value })}
-                  >
-                    {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                  <select className="form-control" value={reqForm.status}
+                    onChange={e=>setReqForm(f=>({...f,status:e.target.value}))}>
+                    {STATUS_OPTIONS.map(s=><option key={s}>{s}</option>)}
                   </select>
                 </div>
               </div>
-              {courseData.category === "Core" && (
-                <div className="form-group">
-                  <label>Core Category *</label>
-                  <select
-                    value={courseData.core_category}
-                    onChange={(e) => setCourseData({ ...courseData, core_category: e.target.value })}
-                    required
-                  >
-                    <option value="">Select Core Category</option>
-                    {coreCategories.map(cat => (
-                      <option key={cat.id} value={cat.name}>{cat.id} {cat.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <div className="form-actions">
-                <button type="button" className="btn-secondary" onClick={() => setIsCourseDialogOpen(false)}>Cancel</button>
-                <button type="submit" className="btn-primary">Add Course</button>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={()=>setReqModal(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Add Course</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Settings Modal */}
-      {isSettingsDialogOpen && (
-        <div className="modal-overlay" onClick={() => setIsSettingsDialogOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>Degree Settings</h2>
-            <form onSubmit={handleSaveSettings}>
+      {/* ══════════════ SETTINGS MODAL ══════════════ */}
+      {settingsOpen && (
+        <div className="modal-overlay" onClick={()=>setSettingsOpen(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Degree Settings</h2>
+              <button className="btn-icon" onClick={()=>setSettingsOpen(false)}>✕</button>
+            </div>
+            <div className="modal-body dp-settings-form">
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Total Credits Required</label>
+                  <input type="number" className="form-control"
+                    value={degreeSettings.totalCredits||120}
+                    onChange={e=>saveSettings({totalCredits:Number(e.target.value)})}/>
+                </div>
+                <div className="form-group">
+                  <label>Minor Credits Required</label>
+                  <input type="number" className="form-control"
+                    value={degreeSettings.minorCredits||18}
+                    onChange={e=>saveSettings({minorCredits:Number(e.target.value)})}/>
+                </div>
+              </div>
               <div className="form-group">
                 <label>Minor Name</label>
-                <input
-                  value={degreeSettings?.minorName || ""}
-                  onChange={(e) => setDegreeSettings({ ...degreeSettings, minorName: e.target.value })}
-                  placeholder="e.g., Business Administration"
-                />
+                <input className="form-control" placeholder="e.g. Business Administration"
+                  value={degreeSettings.minorName||""}
+                  onChange={e=>saveSettings({minorName:e.target.value})}/>
               </div>
-              <div className="form-group">
-                <label>Minor Credits Required</label>
-                <input
-                  type="number"
-                  value={degreeSettings?.minorCreditsRequired || 18}
-                  onChange={(e) => setDegreeSettings({ ...degreeSettings, minorCreditsRequired: Number(e.target.value) })}
-                />
+              <div className="dp-settings-note">
+                Changes save automatically. Your degree progress will update in real time.
               </div>
-              <div className="form-actions">
-                <button type="button" className="btn-secondary" onClick={() => setIsSettingsDialogOpen(false)}>Cancel</button>
-                <button type="submit" className="btn-primary">Save Settings</button>
-              </div>
-            </form>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={()=>setSettingsOpen(false)}>Done</button>
+            </div>
           </div>
         </div>
       )}
-      {isDeleteDialogOpen && (
-  <div className="modal-overlay" onClick={() => setIsDeleteDialogOpen(false)}>
-    <div className="delete-dialog" onClick={(e) => e.stopPropagation()}>
-      <div className="delete-icon">⚠</div>
-      <h3>Delete Semester?</h3>
-      <p>Are you sure you want to delete <strong>{semesterToDelete?.name}</strong>?</p>
-      <p>This will remove all courses planned for this term.</p>
-      <p className="warning-text">This action cannot be undone.</p>
-      <div className="dialog-actions">
-        <button onClick={() => setIsDeleteDialogOpen(false)} className="cancel-btn">
-          Cancel
-        </button>
-        <button onClick={handleConfirmDeleteSemester} className="confirm-delete-btn">
-          Delete
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+
+      {/* ══════════════ DELETE CONFIRM ══════════════ */}
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={()=>setDeleteTarget(null)}>
+          <div className="modal delete-modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-body" style={{textAlign:"center",padding:"2rem 1.5rem"}}>
+              <div className="delete-modal-icon">🗑️</div>
+              <h3 style={{color:"var(--text-primary)",marginBottom:"0.5rem"}}>
+                {deleteTarget.type==="semester" ? "Delete Semester?" : "Remove Course?"}
+              </h3>
+              <p style={{color:"var(--text-muted)",fontSize:"0.875rem"}}>
+                {deleteTarget.type==="semester"
+                  ? "This will remove the semester and all its planned courses."
+                  : "This will remove the course from your planner."
+                } This cannot be undone.
+              </p>
+            </div>
+            <div className="modal-footer" style={{justifyContent:"center"}}>
+              <button className="btn btn-secondary" onClick={()=>setDeleteTarget(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={()=>{
+                if (deleteTarget.type==="semester")    deleteSemester(deleteTarget.id);
+                else if (deleteTarget.type==="semCourse") deleteSemCourse(deleteTarget.semId,deleteTarget.courseId);
+                else deleteReq(deleteTarget.type, deleteTarget.id);
+              }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

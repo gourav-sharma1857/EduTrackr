@@ -1,312 +1,406 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { collection, query, where, onSnapshot, doc, getDoc } from "firebase/firestore";
 import { db, auth } from "../firebase.js";
 import { onAuthStateChanged } from "firebase/auth";
+import { Calculator, TrendingUp, BookOpen, ChevronDown, ChevronUp, Info, Target, Sliders } from "lucide-react";
+import { resolveScale, getLetter, gradeColor, pctColor, calcClassGrade } from "../utils/gradeUtils.js";
 import "../styles/GpaCalculator.css";
 
-
 export default function GpaCalculator() {
-  const [user, setUser] = useState(null);
-  const [userProfile, setUserProfile] = useState(null);
-  const [classes, setClasses] = useState([]);
-  const [allCompletedCourses, setAllCompletedCourses] = useState([]);
-  const [completedAssignments, setCompletedAssignments] = useState([]);
+  const [user, setUser]         = useState(null);
+  const [profile, setProfile]   = useState(null);
+  const [classes, setClasses]   = useState([]);
+  const [gradedA, setGradedA]   = useState([]);
   const [categoryWeights, setCategoryWeights] = useState({});
+  const [globalScale, setGlobalScale] = useState(null);
+  const [maxGpa, setMaxGpa]     = useState(4.0);
+  const [expandedClass, setExpandedClass] = useState(null);
+  const [showScale, setShowScale]   = useState(false);
+  const [whatIfMode, setWhatIfMode] = useState(false);
+  const [whatIfGrades, setWhatIfGrades] = useState({});
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (currentUser) => setUser(currentUser));
+    const unsub = onAuthStateChanged(auth, u => setUser(u));
     return () => unsub();
   }, []);
 
   useEffect(() => {
     if (!user) return;
-    const loadData = async () => {
-      const profileDoc = await getDoc(doc(db, "users", user.uid));
-      if (profileDoc.exists()) setUserProfile(profileDoc.data());
-      
-      const weightsDoc = await getDoc(doc(db, "categoryWeights", user.uid));
-      if (weightsDoc.exists()) setCategoryWeights(weightsDoc.data().weights || {});
-    };
-    loadData();
-  }, [user]);
+    const uid = user.uid;
+    const subs = [];
 
-   useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, "classes"), where("uid", "==", user.uid), where("is_active", "==", true));
-    const unsub = onSnapshot(q, (snapshot) => {
-      setClasses(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-    });
-    return () => unsub();
-  }, [user]);
+    subs.push(onSnapshot(doc(db,"users",uid), s => { if(s.exists()) setProfile(s.data()); }));
+    subs.push(onSnapshot(
+      query(collection(db,"classes"), where("uid","==",uid), where("is_active","==",true)),
+      s => setClasses(s.docs.map(d=>({id:d.id,...d.data()})))
+    ));
+    subs.push(onSnapshot(
+      query(collection(db,"assignments"),
+        where("uid","==",uid),
+        where("is_completed","==",true),
+        where("is_graded","==",true)
+      ),
+      s => setGradedA(s.docs.map(d=>({id:d.id,...d.data()})))
+    ));
 
-  useEffect(() => {
-    if (!user) return;
-    const q = query(
-      collection(db, "classes"), 
-      where("uid", "==", user.uid), 
-      where("is_completed", "==", true) 
-    );
-    const unsub = onSnapshot(q, (snapshot) => {
-      setAllCompletedCourses(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-    });
-    return () => unsub();
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, "assignments"), where("uid", "==", user.uid), where("is_completed", "==", true), where("is_graded", "==", true));
-    const unsub = onSnapshot(q, (snapshot) => {
-      setCompletedAssignments(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-    });
-    return () => unsub();
-  }, [user]);
-
-  const getLetterGrade = (percentage) => {
-    if (percentage >= 97) return { grade: 'A+', gpa: 4.0 };
-    if (percentage >= 93) return { grade: 'A', gpa: 4.0 };
-    if (percentage >= 90) return { grade: 'A-', gpa: 3.67 };
-    if (percentage >= 87) return { grade: 'B+', gpa: 3.33 };
-    if (percentage >= 83) return { grade: 'B', gpa: 3.0 };
-    if (percentage >= 80) return { grade: 'B-', gpa: 2.67 };
-    if (percentage >= 77) return { grade: 'C+', gpa: 2.33 };
-    if (percentage >= 73) return { grade: 'C', gpa: 2.0 };
-    if (percentage >= 70) return { grade: 'C-', gpa: 1.67 };
-    if (percentage >= 67) return { grade: 'D+', gpa: 1.33 };
-    if (percentage >= 63) return { grade: 'D', gpa: 1.0 };
-    if (percentage >= 60) return { grade: 'D-', gpa: 0.67 };
-    return { grade: 'F', gpa: 0.0 };
-  };
-
-  const getGradeColor = (gpa) => {
-    if (gpa >= 3.5) return '#10b981';
-    if (gpa >= 3.0) return '#3b82f6';
-    if (gpa >= 2.5) return '#f59e0b';
-    if (gpa >= 2.0) return '#f97316';
-    return '#ef4444';
-  };
-
-  const calculateClassGrade = (classId) => {
-    const gradedAssignments = completedAssignments.filter(a => a.class_id === classId);
-    if (gradedAssignments.length === 0) return null;
-
-    const categories = {};
-    gradedAssignments.forEach(assignment => {
-      const cat = assignment.category || 'Other';
-      if (!categories[cat]) {
-        categories[cat] = { total: 0, earned: 0, weight: categoryWeights[`${classId}_${cat}`] || 0 };
+    const loadExtras = async () => {
+      const wSnap = await getDoc(doc(db,"categoryWeights",uid));
+      if (wSnap.exists()) setCategoryWeights(wSnap.data().weights||{});
+      const gSnap = await getDoc(doc(db,"gpaScale",uid));
+      if (gSnap.exists()) {
+        setGlobalScale(gSnap.data().scale||null);
+        setMaxGpa(gSnap.data().maxGpa||4.0);
       }
-      categories[cat].total += assignment.total_points || 0;
-      categories[cat].earned += assignment.earned_points || 0;
-    });
-
-    Object.keys(categories).forEach(cat => {
-      categories[cat].percentage = categories[cat].total > 0 
-        ? (categories[cat].earned / categories[cat].total) * 100 
-        : 0;
-    });
-
-    const totalWeight = Object.values(categories).reduce((sum, c) => sum + c.weight, 0);
-    
-    let finalPercentage;
-    if (totalWeight > 0 && totalWeight <= 100) {
-      finalPercentage = Object.values(categories).reduce((sum, c) => {
-        return sum + (c.percentage * (c.weight / 100));
-      }, 0);
-      finalPercentage = (finalPercentage / totalWeight) * 100;
-    } else {
-      const totalPoints = gradedAssignments.reduce((sum, a) => sum + (a.total_points || 0), 0);
-      const earnedPoints = gradedAssignments.reduce((sum, a) => sum + (a.earned_points || 0), 0);
-      finalPercentage = totalPoints > 0 ? (earnedPoints / totalPoints) * 100 : 0;
-    }
-
-    return { 
-      percentage: finalPercentage, 
-      categories, 
-      letterGrade: getLetterGrade(finalPercentage),
-      assignmentCount: gradedAssignments.length
     };
+    loadExtras();
+    return () => subs.forEach(u=>u());
+  }, [user]);
+
+  /* For a given class, resolve its scale then calculate grade + letter */
+  const getClassResult = (cls) => {
+    const asgns = gradedA.filter(a => a.class_id === cls.id);
+    const result = calcClassGrade(asgns, categoryWeights, cls.id);
+    if (!result) return null;
+    const scale  = resolveScale(cls, globalScale);
+    const grade  = getLetter(result.pct, scale);
+    return { ...result, grade, scale };
   };
 
-  const calculateSemesterGPA = () => {
-    let totalPoints = 0;
-    let totalCredits = 0;
-
+  /* Semester GPA */
+  const semesterGpa = useMemo(() => {
+    let pts=0, cr=0;
     classes.forEach(cls => {
-      const grade = calculateClassGrade(cls.id);
-      if (grade && cls.credit_hours && !cls.is_transfer) {
-        totalPoints += grade.letterGrade.gpa * cls.credit_hours;
-        totalCredits += cls.credit_hours;
-      }
+      const r = getClassResult(cls);
+      if (!r || !cls.credit_hours) return;
+      pts += r.grade.gpaValue * Number(cls.credit_hours);
+      cr  += Number(cls.credit_hours);
     });
-    return totalCredits > 0 ? (totalPoints / totalCredits) : 0;
-  };
+    return cr > 0 ? pts/cr : null;
+  }, [classes, gradedA, categoryWeights, globalScale]);
 
-  const calculateCumulativeGPA = () => {
-  // 1. Get Prior History from Profile
-  const priorGpa = userProfile?.current_gpa ? Number(userProfile.current_gpa) : 0;
-  const priorCredits = userProfile?.completed_credit_hours ? Number(userProfile.completed_credit_hours) : 0;
+  /* Cumulative GPA */
+  const cumulativeGpa = useMemo(() => {
+    const priorGpa = Number(profile?.current_gpa||0);
+    const priorCr  = Number(profile?.completed_credit_hours||0);
+    const allGraded = classes.every(cls => getClassResult(cls) !== null);
+    if (!allGraded || !classes.length) return priorGpa||null;
+    let pts=0, cr=0;
+    classes.forEach(cls => {
+      const r = getClassResult(cls);
+      if (!r || !cls.credit_hours) return;
+      pts += r.grade.gpaValue * Number(cls.credit_hours);
+      cr  += Number(cls.credit_hours);
+    });
+    const totalPts = (priorGpa*priorCr)+pts;
+    const totalCr  = priorCr+cr;
+    return totalCr > 0 ? totalPts/totalCr : priorGpa||null;
+  }, [classes, gradedA, profile, categoryWeights, globalScale]);
 
-  // 2. Check if the CURRENT semester is fully finished
-  // We check if every active class has its assignments graded
-  const allCurrentClassesGraded = classes.every(cls => {
-    const gradeInfo = calculateClassGrade(cls.id);
-    return gradeInfo !== null; // Returns false if any class has 0 assignments graded
-  });
+  /* What-if GPA */
+  const whatIfGpa = useMemo(() => {
+    if (!whatIfMode) return null;
+    const priorGpa = Number(profile?.current_gpa||0);
+    const priorCr  = Number(profile?.completed_credit_hours||0);
+    let pts=0, cr=0;
+    classes.forEach(cls => {
+      if (!cls.credit_hours) return;
+      const actual = getClassResult(cls);
+      const hypo   = whatIfGrades[cls.id];
+      let gpaVal;
+      if (hypo !== undefined) {
+        const scale = resolveScale(cls, globalScale);
+        gpaVal = getLetter(hypo, scale).gpaValue;
+      } else if (actual) {
+        gpaVal = actual.grade.gpaValue;
+      } else return;
+      pts += gpaVal * Number(cls.credit_hours);
+      cr  += Number(cls.credit_hours);
+    });
+    const tp = (priorGpa*priorCr)+pts;
+    const tc = priorCr+cr;
+    return tc > 0 ? tp/tc : null;
+  }, [whatIfMode, whatIfGrades, classes, gradedA, profile, categoryWeights, globalScale]);
 
-  // 3. Calculate Current Semester Points
-  let currentPoints = 0;
-  let currentCredits = 0;
+  const totalCredits = classes.reduce((s,c)=>s+Number(c.credit_hours||0),0);
 
-  classes.forEach(cls => {
-    const grade = calculateClassGrade(cls.id);
-    if (grade && !cls.is_transfer) {
-      currentPoints += (grade.letterGrade.gpa * (Number(cls.credit_hours) || 0));
-      currentCredits += (Number(cls.credit_hours) || 0);
-    }
-  });
-
-  if (allCurrentClassesGraded && currentCredits > 0) {
-    const totalPoints = (priorGpa * priorCredits) + currentPoints;
-    const totalCredits = priorCredits + currentCredits;
-    return totalCredits > 0 ? (totalPoints / totalCredits) : priorGpa;
-  }
-
-  return priorGpa;
-};
-
-  const semesterGPA = calculateSemesterGPA();
-  const cumulativeGPA = calculateCumulativeGPA();
-  const totalCredits = allCompletedCourses.reduce((sum, cls) => sum + (Number(cls.credit_hours) || 0), 0) + 
-                     classes.reduce((sum, cls) => sum + (Number(cls.credit_hours) || 0), 0);
-
-  if (!user) {
-    return <div className="empty-state">Please sign in to view GPA calculator</div>;
-  }
+  if (!user) return <div className="gpa-signin">Please sign in to view GPA Calculator</div>;
 
   return (
-    <div className="gpa-container">
+    <div className="gpa-calc">
       <div className="gpa-header">
-        <h1>GPA Calculator</h1>
-        <p>Track your academic performance (UTD 4.0 Scale)</p>
+        <div>
+          <h1>GPA Calculator</h1>
+          <p>Real-time GPA using each class's custom grading scale</p>
+        </div>
+        <div className="gpa-header-actions">
+          <button className={"btn btn-ghost"+(showScale?" active":"")} onClick={()=>setShowScale(v=>!v)}>
+            <Info size={15}/> Grade Scale
+          </button>
+          <button className={"btn btn-ghost"+(whatIfMode?" active":"")}
+            onClick={()=>{setWhatIfMode(v=>!v);setWhatIfGrades({});}}>
+            <Sliders size={15}/> What-If
+          </button>
+        </div>
       </div>
 
-      
-      <div className="gpa-summary">
-        <div className="gpa-card main">
-          <div className="gpa-card-content">
-            <span className="gpa-value" style={{ color: getGradeColor(semesterGPA) }}>
-              {semesterGPA.toFixed(2)}
-            </span>
-            <span className="gpa-label">Semester GPA</span>
-            <span className="gpa-sublabel">Based on {completedAssignments.length} graded assignments</span>
-          </div>
+      {profile?.current_gpa && (
+        <div className="gpa-prior-banner">
+          <span>📋</span>
+          <span>Starting from <strong>{Number(profile.current_gpa).toFixed(2)} GPA</strong> with{" "}
+          <strong>{profile.completed_credit_hours||0} prior credits</strong> — update in Profile.</span>
         </div>
+      )}
 
+      {/* Summary cards */}
+      <div className="gpa-summary stagger-1">
+        <div className="gpa-card gpa-card-main">
+          <div className="gpa-card-label">Semester GPA</div>
+          <div className="gpa-card-val" style={{color:semesterGpa?gradeColor(semesterGpa,maxGpa):"var(--text-muted)"}}>
+            {semesterGpa?semesterGpa.toFixed(2):"—"}
+          </div>
+          <div className="gpa-card-sub">{gradedA.length} graded assignment{gradedA.length!==1?"s":""}</div>
+          {semesterGpa && (
+            <div className="gpa-card-bar">
+              <div style={{width:(semesterGpa/maxGpa*100)+"%",background:gradeColor(semesterGpa,maxGpa),height:"100%",borderRadius:"3px",transition:"width 0.6s"}}/>
+            </div>
+          )}
+        </div>
         <div className="gpa-card">
-          <div className="gpa-card-content">
-            <span className="gpa-value" style={{ color: getGradeColor(cumulativeGPA) }}>
-              {cumulativeGPA.toFixed(2)}
-            </span>
-            <span className="gpa-label">Cumulative GPA</span>
-            <span className="gpa-sublabel">
-              {classes.every(cls => calculateClassGrade(cls.id)) 
-                ? "Updated with current semester" 
-                : "Locked until all assignments are graded"}
-            </span>
+          <div className="gpa-card-label">Cumulative GPA</div>
+          <div className="gpa-card-val" style={{color:cumulativeGpa?gradeColor(cumulativeGpa,maxGpa):"var(--text-muted)"}}>
+            {cumulativeGpa?cumulativeGpa.toFixed(2):"—"}
           </div>
+          <div className="gpa-card-sub">
+            {classes.every(c=>getClassResult(c))?"Includes current semester":"Grade all classes to update"}
+          </div>
+          {cumulativeGpa && (
+            <div className="gpa-card-bar">
+              <div style={{width:(cumulativeGpa/maxGpa*100)+"%",background:gradeColor(cumulativeGpa,maxGpa),height:"100%",borderRadius:"3px",transition:"width 0.6s"}}/>
+            </div>
+          )}
         </div>
-
         <div className="gpa-card">
-          <div className="gpa-card-content">
-            <span className="gpa-value">{totalCredits}</span>
-            <span className="gpa-label">Total Credits</span>
-            <span className="gpa-sublabel">{classes.reduce((sum, cls) => sum + (cls.credit_hours || 0), 0)} current</span>
-          </div>
+          <div className="gpa-card-label">Current Credits</div>
+          <div className="gpa-card-val" style={{color:"var(--text-primary)"}}>{totalCredits}</div>
+          <div className="gpa-card-sub">{Number(profile?.completed_credit_hours||0)} prior + {totalCredits} this semester</div>
         </div>
-      </div>
-
-      
-      <div className="gpa-scale">
-        <h3>UTD GPA Scale</h3>
-        <div className="scale-grid">
-          <div className="scale-item"><span className="grade">A+/A</span><span>4.0</span><span>93-100%</span></div>
-          <div className="scale-item"><span className="grade">A-</span><span>3.67</span><span>90-92%</span></div>
-          <div className="scale-item"><span className="grade">B+</span><span>3.33</span><span>87-89%</span></div>
-          <div className="scale-item"><span className="grade">B</span><span>3.0</span><span>83-86%</span></div>
-          <div className="scale-item"><span className="grade">B-</span><span>2.67</span><span>80-82%</span></div>
-          <div className="scale-item"><span className="grade">C+</span><span>2.33</span><span>77-79%</span></div>
-          <div className="scale-item"><span className="grade">C</span><span>2.0</span><span>73-76%</span></div>
-          <div className="scale-item"><span className="grade">C-</span><span>1.67</span><span>70-72%</span></div>
-          <div className="scale-item"><span className="grade">D+</span><span>1.33</span><span>67-69%</span></div>
-          <div className="scale-item"><span className="grade">D</span><span>1.0</span><span>63-66%</span></div>
-          <div className="scale-item"><span className="grade">D-</span><span>0.67</span><span>60-62%</span></div>
-          <div className="scale-item"><span className="grade">F</span><span>0.0</span><span>&lt;60%</span></div>
-        </div>
-      </div>
-
-      <div className="classes-breakdown">
-        <h2>Class Grade Breakdown</h2>
-        {classes.length === 0 ? (
-          <div className="empty-card">No active classes. Add classes to calculate GPA.</div>
-        ) : (
-          <div className="class-cards">
-            {classes.map(cls => {
-              const gradeInfo = calculateClassGrade(cls.id);
-              return (
-                <div key={cls.id} className="class-grade-card" style={{ borderLeftColor: cls.color || "#3b82f6" }}>
-                  <div className="class-grade-header">
-                    <div>
-                      <h3>{cls.course_code}</h3>
-                      <p>{cls.course_name}</p>
-                    </div>
-                    {gradeInfo ? (
-                      <div className="grade-display" style={{ color: getGradeColor(gradeInfo.letterGrade.gpa) }}>
-                        <span className="letter-grade">{gradeInfo.letterGrade.grade}</span>
-                        <span className="percentage">{gradeInfo.percentage.toFixed(2)}%</span>
-                      </div>
-                    ) : (
-                      <div className="grade-display no-grade">
-                        <span>N/A</span>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="class-meta">
-                    <span>{cls.credit_hours} credits</span>
-                    {gradeInfo && <span>{gradeInfo.assignmentCount} graded assignments</span>}
-                  </div>
-
-                  {gradeInfo && Object.keys(gradeInfo.categories).length > 0 && (
-                    <div className="category-breakdown">
-                      <h4>Category Breakdown</h4>
-                      {Object.entries(gradeInfo.categories).map(([category, data]) => (
-                        <div key={category} className="category-row">
-                          <span className="category-name">{category}</span>
-                          <div className="category-bar">
-                            <div 
-                              className="category-fill" 
-                              style={{ 
-                                width: `${data.percentage}%`,
-                                backgroundColor: getGradeColor(getLetterGrade(data.percentage).gpa)
-                              }}
-                            ></div>
-                          </div>
-                          <span className="category-percent">{data.percentage.toFixed(1)}%</span>
-                          <span className="category-points">{data.earned.toFixed(1)}/{data.total}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {!gradeInfo && (
-                    <p className="no-grades-message">No graded assignments yet</p>
-                  )}
-                </div>
-              );
-            })}
+        {whatIfMode && (
+          <div className="gpa-card gpa-card-whatif">
+            <div className="gpa-card-label">What-If GPA</div>
+            <div className="gpa-card-val" style={{color:whatIfGpa?gradeColor(whatIfGpa,maxGpa):"var(--text-muted)"}}>
+              {whatIfGpa?whatIfGpa.toFixed(2):"—"}
+            </div>
+            <div className="gpa-card-sub">Hypothetical scenario</div>
           </div>
         )}
       </div>
+
+      {/* Global scale panel */}
+      {showScale && (
+        <div className="gpa-scale-panel stagger-2">
+          <div className="gpa-scale-header">
+            <span>Global Fallback Scale — {globalScale?"Custom":"Default 4.0"}</span>
+            <span className="gpa-scale-note">Per-class scales override this. Set in Classes → Grading Scale tab.</span>
+          </div>
+          <div className="gpa-scale-grid">
+            {(globalScale||[
+              {letter:"A+",min:97,max:100,gpaValue:4.0},{letter:"A",min:93,max:96.99,gpaValue:4.0},
+              {letter:"A-",min:90,max:92.99,gpaValue:3.67},{letter:"B+",min:87,max:89.99,gpaValue:3.33},
+              {letter:"B",min:83,max:86.99,gpaValue:3.0},{letter:"B-",min:80,max:82.99,gpaValue:2.67},
+              {letter:"C+",min:77,max:79.99,gpaValue:2.33},{letter:"C",min:73,max:76.99,gpaValue:2.0},
+              {letter:"C-",min:70,max:72.99,gpaValue:1.67},{letter:"D+",min:67,max:69.99,gpaValue:1.33},
+              {letter:"D",min:63,max:66.99,gpaValue:1.0},{letter:"F",min:0,max:62.99,gpaValue:0.0},
+            ]).map((row,i)=>(
+              <div key={i} className="gpa-scale-row">
+                <span className="gpa-scale-letter" style={{color:gradeColor(row.gpaValue,maxGpa)}}>{row.letter}</span>
+                <span className="gpa-scale-range">{row.min??row.minPercent}–{row.max??row.maxPercent}%</span>
+                <span className="gpa-scale-pts" style={{color:gradeColor(row.gpaValue,maxGpa)}}>{row.gpaValue?.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="gpa-section-title stagger-2"><BookOpen size={16}/> Class Breakdown</div>
+
+      {classes.length===0 ? (
+        <div className="empty-state">
+          <div className="empty-state-icon">📊</div>
+          <h3>No active classes</h3>
+          <p>Add classes and grade assignments to calculate your GPA</p>
+        </div>
+      ) : (
+        <div className="gpa-classes stagger-3">
+          {classes.map(cls=>{
+            const result = getClassResult(cls);
+            const isOpen = expandedClass===cls.id;
+            const scale  = resolveScale(cls, globalScale);
+            const hasCustomScale = !!(cls.grading_scale?.length);
+            const hypo   = whatIfGrades[cls.id];
+            const hypoGrd = hypo!==undefined ? getLetter(hypo, scale) : null;
+
+            return (
+              <div key={cls.id} className={"gpa-cls-card"+(isOpen?" expanded":"")}
+                style={{"--cls-color":cls.color||"#3b82f6"}}>
+                <button className="gpa-cls-header"
+                  onClick={()=>setExpandedClass(isOpen?null:cls.id)}>
+                  <div className="gpa-cls-bar" style={{background:cls.color||"#3b82f6"}}/>
+                  <div className="gpa-cls-identity">
+                    <span className="gpa-cls-code" style={{color:cls.color||"#3b82f6"}}>{cls.course_code}</span>
+                    <span className="gpa-cls-name">{cls.course_name}</span>
+                    <span className="gpa-cls-cr">{cls.credit_hours}cr</span>
+                    {hasCustomScale && (
+                      <span className="gpa-cls-custom-scale" title="Uses class-specific grading scale">📊</span>
+                    )}
+                  </div>
+                  <div className="gpa-cls-grade-wrap">
+                    {result ? (
+                      <>
+                        <span className="gpa-cls-letter" style={{color:pctColor(result.pct)}}>{result.grade.letter}</span>
+                        <span className="gpa-cls-pct"   style={{color:pctColor(result.pct)}}>{result.pct.toFixed(1)}%</span>
+                        <span className="gpa-cls-gpa">{result.grade.gpaValue.toFixed(2)} pts</span>
+                      </>
+                    ) : (
+                      <span className="gpa-cls-none">No grades</span>
+                    )}
+                    {whatIfMode && hypoGrd && (
+                      <div className="gpa-cls-whatif-pill">
+                        <span style={{color:gradeColor(hypoGrd.gpaValue,maxGpa)}}>
+                          {hypoGrd.letter} ({hypo}%)
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  {isOpen ? <ChevronUp size={15} className="gpa-cls-chevron"/> : <ChevronDown size={15} className="gpa-cls-chevron"/>}
+                </button>
+
+                {result && (
+                  <div className="gpa-cls-progress">
+                    <div style={{width:result.pct+"%",background:pctColor(result.pct),height:"100%",borderRadius:"0",transition:"width 0.5s"}}/>
+                  </div>
+                )}
+
+                {isOpen && (
+                  <div className="gpa-cls-detail">
+                    {/* Per-class scale display */}
+                    {hasCustomScale && (
+                      <div className="gpa-cls-scale-info">
+                        <div className="gpa-cat-heading">📊 This Class's Grading Scale</div>
+                        <div className="gpa-cls-scale-chips">
+  <details className="gpa-scale-collapse">
+    <summary className="gpa-scale-summary">
+      {/* This is the single-line preview showing just the first item */}
+      {cls.grading_scale.filter(r => r.letter).slice(0, 1).map((r, i) => (
+        <span 
+          key={i} 
+          className="gpa-scale-preview-chip main-preview"
+          style={{
+            color: gradeColor(r.gpaValue, maxGpa),
+            borderColor: gradeColor(r.gpaValue, maxGpa) + "44"
+          }}
+        >
+          {r.letter} {r.min}–{r.max}%
+        </span>
+      ))}
+      <span className="toggle-indicator">+{cls.grading_scale.filter(r => r.letter).length - 1} more</span>
+    </summary>
+
+    <div className="gpa-scale-expanded-content">
+      {/* This shows the rest of the items when clicked, skipping the first one */}
+      {cls.grading_scale.filter(r => r.letter).slice(1).map((r, i) => (
+        <span 
+          key={i} 
+          className="gpa-scale-preview-chip"
+          style={{
+            color: gradeColor(r.gpaValue, maxGpa),
+            borderColor: gradeColor(r.gpaValue, maxGpa) + "44"
+          }}
+        >
+          {r.letter} {r.min}–{r.max}%
+        </span>
+      ))}
+    </div>
+  </details>
+</div>
+                      </div>
+                    )}
+
+                    {/* What-if slider */}
+                    {whatIfMode && (
+                      <div className="gpa-whatif-row">
+                        <span className="gpa-whatif-label"><Sliders size={13}/> What-If</span>
+                        <input type="range" min="0" max="100" className="gpa-whatif-slider"
+                          value={hypo??(result?.pct??75)}
+                          style={{"--fill":pctColor(hypo??result?.pct??75)}}
+                          onChange={e=>setWhatIfGrades(p=>({...p,[cls.id]:Number(e.target.value)}))}/>
+                        <span className="gpa-whatif-val" style={{color:pctColor(hypo??result?.pct??75)}}>
+                          {hypo!==undefined?hypo:(result?.pct?.toFixed(1)||"—")}%
+                        </span>
+                        {hypo!==undefined && (
+                          <button className="gpa-whatif-reset"
+                            onClick={()=>setWhatIfGrades(p=>{const n={...p};delete n[cls.id];return n;})}>
+                            Reset
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Category breakdown */}
+                    {result && Object.keys(result.cats).length>0 && (
+                      <div className="gpa-cat-breakdown">
+                        <div className="gpa-cat-heading">Category Breakdown</div>
+                        {Object.entries(result.cats).map(([cat,data])=>(
+                          <div key={cat} className="gpa-cat-row">
+                            <span className="gpa-cat-name">{cat}</span>
+                            <div className="gpa-cat-bar-track">
+                              <div className="gpa-cat-bar-fill" style={{width:data.pct+"%",background:pctColor(data.pct)}}/>
+                            </div>
+                            <span className="gpa-cat-pct" style={{color:pctColor(data.pct)}}>{data.pct.toFixed(1)}%</span>
+                            <span className="gpa-cat-pts">{data.earned.toFixed(0)}/{data.total}</span>
+                            {data.weight>0 && <span className="gpa-cat-weight">{data.weight}%</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Target GPA needed */}
+                    {profile?.current_gpa && (
+                      <div className="gpa-target-section">
+                        <div className="gpa-cat-heading"><Target size={13}/> Grade Needed to Hit Target GPA</div>
+                        <div className="gpa-targets">
+                          {[3.0,3.3,3.5,3.7,4.0].filter(t=>t<=maxGpa).map(target=>{
+                            const priorGpa=Number(profile.current_gpa||0);
+                            const priorCr =Number(profile.completed_credit_hours||0);
+                            const cr=Number(cls.credit_hours||0);
+                            if(!cr)return null;
+                            const needed=((target*(priorCr+cr))-(priorGpa*priorCr))/cr;
+                            const neededPct=Math.max(0,Math.min(100,(needed/maxGpa)*100));
+                            const neededLetter=getLetter(neededPct,scale);
+                            return (
+                              <div key={target} className="gpa-target-row">
+                                <span className="gpa-target-label">{target.toFixed(1)} GPA</span>
+                                <span className="gpa-target-val" style={{color:gradeColor(needed,maxGpa)}}>
+                                  {neededLetter.letter} (≥{neededPct.toFixed(0)}%)
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {!result && (
+                      <div className="gpa-no-grades-msg">
+                        No graded assignments yet — head to Grade Tracker to enter grades.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

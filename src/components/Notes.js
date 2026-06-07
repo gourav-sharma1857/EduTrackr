@@ -1,553 +1,586 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
-  collection,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  onSnapshot,
-  doc,
-  query,
-  where,
+  collection, query, where, onSnapshot,
+  addDoc, updateDoc, deleteDoc, doc
 } from "firebase/firestore";
 import { db, auth } from "../firebase.js";
 import { onAuthStateChanged } from "firebase/auth";
+import {
+  Plus, Search, Trash2, Edit2, Tag, X,
+  Download, BookOpen, Clock, Hash, ChevronDown, ChevronUp,
+  StickyNote, FileText
+} from "lucide-react";
 import "../styles/Notes.css";
 
 export default function Notes() {
-  const [user, setUser] = useState(null);
-  const [notes, setNotes] = useState([]);
-  const [classes, setClasses] = useState([]);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingNote, setEditingNote] = useState(null);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [noteToDelete, setNoteToDelete] = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [user, setUser]             = useState(null);
+  const [notes, setNotes]           = useState([]);
+  const [classes, setClasses]       = useState([]);
+  const [search, setSearch]         = useState("");
   const [filterClass, setFilterClass] = useState("all");
+  const [filterTag, setFilterTag]   = useState("");
   const [viewingNote, setViewingNote] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingNote, setEditingNote] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [tagInput, setTagInput]     = useState("");
+  const [saving, setSaving]         = useState(false);
+  const [expandedClasses, setExpandedClasses] = useState({});
 
-  const [formData, setFormData] = useState({
-    class_id: "",
-    title: "",
-    content: "",
-    lecture_date: "",
-    tags: [],
-  });
-  const [tagInput, setTagInput] = useState("");
+  const blankForm = {
+    class_id:"", title:"", content:"",
+    lecture_date:"", tags:[]
+  };
+  const [form, setForm] = useState(blankForm);
 
-  const handleExportPDF = (note) => {
-  const printWindow = window.open('', '_blank');
-  printWindow.document.write(`
-    <html>
-      <head>
-        <title>${note.title}</title>
-        <style>
-          body { font-family: sans-serif; padding: 40px; line-height: 1.6; }
-          h1 { color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-          .date { color: #666; margin-bottom: 20px; }
-          .content { white-space: pre-wrap; font-size: 1.1rem; }
-          .tags { margin-top: 30px; color: #007bff; }
-        </style>
-      </head>
-      <body>
-        <h1>${note.title}</h1>
-        <div class="date">Lecture Date: ${note.lecture_date}</div>
-        <div class="content">${note.content}</div>
-        <div class="tags">${note.tags.map(t => '#' + t).join(' ')}</div>
-      </body>
-    </html>
-  `);
-  printWindow.document.close();
-  printWindow.print();
-};
-
-  // AUTH
+  /* ── Auth ── */
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-    });
+    const unsub = onAuthStateChanged(auth, u => setUser(u));
     return () => unsub();
   }, []);
-    useEffect(() => {
-      if (viewingNote || isDialogOpen) {
-        document.body.classList.add("modal-open");
-      } else {
-        document.body.classList.remove("modal-open");
-      }
-      
-      return () => document.body.classList.remove("modal-open");
-    }, [viewingNote, isDialogOpen]);
 
-  // Fetch classes
+  /* ── Firestore ── */
   useEffect(() => {
-    if (!user) {
-      setClasses([]);
-      return;
-    }
-    const q = query(
-      collection(db, "classes"),
-      where("uid", "==", user.uid)
-    );
-    const unsub = onSnapshot(q, (snapshot) => {
-      const fetched = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setClasses(fetched);
-    });
-    return () => unsub();
+    if (!user) return;
+    const uid = user.uid;
+    const subs = [];
+
+    subs.push(onSnapshot(
+      query(collection(db,"classes"), where("uid","==",uid)),
+      s => setClasses(s.docs.map(d=>({id:d.id,...d.data()})))
+    ));
+    subs.push(onSnapshot(
+      query(collection(db,"notes"), where("uid","==",uid)),
+      s => setNotes(s.docs.map(d=>({id:d.id,...d.data()}))
+        .sort((a,b) => new Date(b.created_at||0) - new Date(a.created_at||0)))
+    ));
+
+    return () => subs.forEach(u => u());
   }, [user]);
 
-  // Fetch notes
-  useEffect(() => {
-    if (!user) {
-      setNotes([]);
-      return;
-    }
-    const q = query(
-      collection(db, "notes"),
-      where("uid", "==", user.uid)
-    );
-    const unsub = onSnapshot(q, (snapshot) => {
-      const fetched = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      // Sort by created_at on client side
-      fetched.sort((a, b) => {
-        const dateA = a.created_at ? new Date(a.created_at) : new Date(0);
-        const dateB = b.created_at ? new Date(b.created_at) : new Date(0);
-        return dateB - dateA;
-      });
-      setNotes(fetched);
-    });
-    return () => unsub();
-  }, [user]);
+  /* ── All tags across all notes ── */
+  const allTags = useMemo(() => {
+    const set = new Set();
+    notes.forEach(n => (n.tags||[]).forEach(t => set.add(t)));
+    return Array.from(set).sort();
+  }, [notes]);
 
-  const resetForm = () => {
-    setFormData({
-      class_id: "",
-      title: "",
-      content: "",
-      lecture_date: "",
-      tags: [],
+  /* ── Filtered notes ── */
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return notes.filter(n => {
+      const matchSearch = !q ||
+        n.title?.toLowerCase().includes(q) ||
+        n.content?.toLowerCase().includes(q) ||
+        (n.tags||[]).some(t => t.toLowerCase().includes(q));
+      const matchClass = filterClass==="all" || n.class_id===filterClass;
+      const matchTag   = !filterTag || (n.tags||[]).includes(filterTag);
+      return matchSearch && matchClass && matchTag;
     });
-    setTagInput("");
+  }, [notes, search, filterClass, filterTag]);
+
+  /* ── Group filtered notes by class ── */
+  const grouped = useMemo(() => {
+    const map = {};
+    filtered.forEach(n => {
+      const cls = classes.find(c => c.id === n.class_id);
+      const key = cls?.id || "general";
+      if (!map[key]) map[key] = { cls, notes:[] };
+      map[key].notes.push(n);
+    });
+    return map;
+  }, [filtered, classes]);
+
+  /* Auto-expand groups */
+  useEffect(() => {
+    const next = {};
+    Object.keys(grouped).forEach(k => {
+      if (expandedClasses[k] === undefined) next[k] = true;
+    });
+    if (Object.keys(next).length)
+      setExpandedClasses(p => ({...p,...next}));
+  }, [grouped]);
+
+  /* ── CRUD ── */
+  const openAdd = () => {
+    setForm(blankForm);
     setEditingNote(null);
+    setTagInput("");
+    setIsModalOpen(true);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!user) {
-      alert("Please sign in to add notes");
-      return;
-    }
+  const openEdit = (note) => {
+    setEditingNote(note);
+    setForm({
+      class_id:     note.class_id||"",
+      title:        note.title||"",
+      content:      note.content||"",
+      lecture_date: note.lecture_date||"",
+      tags:         note.tags||[],
+    });
+    setTagInput("");
+    setIsModalOpen(true);
+  };
 
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingNote(null);
+    setTagInput("");
+  };
+
+  const handleSubmit = async e => {
+    e.preventDefault();
+    setSaving(true);
     try {
       if (editingNote) {
-        const docRef = doc(db, "notes", editingNote.id);
-        await updateDoc(docRef, {
-          ...formData,
-          updated_at: new Date().toISOString(),
+        await updateDoc(doc(db,"notes",editingNote.id), {
+          ...form, updated_at: new Date().toISOString()
         });
       } else {
-        await addDoc(collection(db, "notes"), {
-          ...formData,
-          uid: user.uid,
+        await addDoc(collection(db,"notes"), {
+          ...form, uid: user.uid,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
       }
-      resetForm();
-      setIsDialogOpen(false);
-    } catch (err) {
-      console.error("Error saving note:", err);
-      alert("Failed to save note. Error: " + err.message);
-    }
-  };
-
-  const handleEdit = (note) => {
-    setEditingNote(note);
-    setFormData({
-      class_id: note.class_id || "",
-      title: note.title || "",
-      content: note.content || "",
-      lecture_date: note.lecture_date || "",
-      tags: note.tags || [],
-    });
-    setIsDialogOpen(true);
-  };
-
-  const confirmDelete = (note) => {
-    setNoteToDelete(note);
-    setShowDeleteDialog(true);
+      closeModal();
+    } catch(err) { console.error(err); }
+    setSaving(false);
   };
 
   const handleDelete = async () => {
-    if (!noteToDelete) return;
-
-    try {
-      await deleteDoc(doc(db, "notes", noteToDelete.id));
-      setShowDeleteDialog(false);
-      setNoteToDelete(null);
-    } catch (err) {
-      console.error("Error deleting note:", err);
-      alert("Failed to delete note.");
-    }
+    if (!deleteTarget) return;
+    await deleteDoc(doc(db,"notes",deleteTarget.id));
+    if (viewingNote?.id === deleteTarget.id) setViewingNote(null);
+    setDeleteTarget(null);
   };
 
   const addTag = () => {
-    if (tagInput && !formData.tags.includes(tagInput)) {
-      setFormData({ ...formData, tags: [...formData.tags, tagInput] });
-      setTagInput("");
+    const t = tagInput.trim().toLowerCase().replace(/\s+/g,"-");
+    if (t && !form.tags.includes(t)) {
+      setForm(f => ({...f, tags:[...f.tags, t]}));
     }
+    setTagInput("");
   };
 
-  const removeTag = (tag) => {
-    setFormData({ ...formData, tags: formData.tags.filter((t) => t !== tag) });
+  const removeTag = tag =>
+    setForm(f => ({...f, tags: f.tags.filter(t=>t!==tag)}));
+
+  /* ── Export as text ── */
+  const exportNote = (note) => {
+    const cls  = classes.find(c => c.id === note.class_id);
+    const text = [
+      note.title,
+      cls ? `Course: ${cls.course_code} — ${cls.course_name}` : "",
+      note.lecture_date ? `Date: ${note.lecture_date}` : "",
+      "",
+      note.content,
+      "",
+      note.tags?.length ? `Tags: ${note.tags.map(t=>"#"+t).join(" ")}` : "",
+    ].filter(l => l !== undefined).join("\n");
+
+    const blob = new Blob([text], {type:"text/plain"});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url;
+    a.download = `${note.title.replace(/\s+/g,"-")}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
-  // Filter notes
-  const filteredNotes = notes.filter((note) => {
-    const matchesSearch =
-      note.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      note.content?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      note.tags?.some((tag) =>
-        tag.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+  const formatDate = ds => {
+    if (!ds) return "";
+    const [y,m,d] = ds.split("-").map(Number);
+    return new Date(y,m-1,d).toLocaleDateString("en-US",{
+      month:"long", day:"numeric", year:"numeric"
+    });
+  };
 
-    const matchesClass = filterClass === "all" || note.class_id === filterClass;
+  const toggleGroup = key =>
+    setExpandedClasses(p => ({...p,[key]:!p[key]}));
 
-    return matchesSearch && matchesClass;
-  });
-
-  // Group notes by class
-  const groupedNotes = classes.reduce((acc, cls) => {
-    const classNotes = filteredNotes.filter((n) => n.class_id === cls.id);
-    if (classNotes.length > 0) {
-      acc[cls.id] = { class: cls, notes: classNotes };
-    }
-    return acc;
-  }, {});
-
-  if (!user) {
-    return (
-      <div className="notes-empty">
-        <div className="empty-icon">🔒</div>
-        <h2>Please sign in to view notes</h2>
-      </div>
-    );
-  }
+  if (!user) return (
+    <div className="notes-signin">Please sign in to view notes</div>
+  );
 
   return (
-    <div className="notes-container">
-      {/* Header */}
+    <div className="notes-page">
+      {/* ── Header ── */}
       <div className="notes-header">
-        <div className="header-actions">
-          <div className="search-bar">
-            <input
-              type="text"
-              placeholder="Search notes..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="search-input"
-            />
-            <span className="search-icon">🔍</span>
-          </div>
-
-          <select
-            className="filter-select"
-            value={filterClass}
-            onChange={(e) => setFilterClass(e.target.value)}
-          >
-            <option value="all">All Classes</option>
-            {classes.map((cls) => (
-              <option key={cls.id} value={cls.id}>
-                {cls.course_code}
-              </option>
-            ))}
-          </select>
-
-          <button
-            className="add-note-btn"
-            onClick={() => {
-              resetForm();
-              setIsDialogOpen(true);
-            }}
-          >
-            <span className="btn-icon">+</span>
-            <span>New Note</span>
-          </button>
+        <div>
+          <h1>Notes</h1>
+          <p>Capture and review your lecture notes</p>
         </div>
+        <button className="btn btn-primary" onClick={openAdd}>
+          <Plus size={16}/> New Note
+        </button>
       </div>
 
-      {/* Notes Display */}
-      {Object.keys(groupedNotes).length === 0 ? (
+      {/* ── Search + Filter bar ── */}
+      <div className="notes-toolbar">
+        <div className="notes-search-wrap">
+          <Search size={15} className="notes-search-icon"/>
+          <input
+            className="notes-search"
+            placeholder="Search notes, content, tags…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          {search && (
+            <button className="notes-search-clear" onClick={()=>setSearch("")}>
+              <X size={13}/>
+            </button>
+          )}
+        </div>
+
+        <select
+          className="notes-filter-select"
+          value={filterClass}
+          onChange={e => setFilterClass(e.target.value)}
+        >
+          <option value="all">All Classes</option>
+          {classes.map(c=>(
+            <option key={c.id} value={c.id}>{c.course_code}</option>
+          ))}
+        </select>
+
+        {/* Tag filter chips */}
+        {allTags.length > 0 && (
+          <div className="notes-tag-filters">
+            {allTags.slice(0,6).map(tag=>(
+              <button
+                key={tag}
+                className={"notes-tag-chip"+(filterTag===tag?" active":"")}
+                onClick={()=>setFilterTag(filterTag===tag?"":tag)}
+              >
+                <Hash size={10}/>{tag}
+              </button>
+            ))}
+            {filterTag && (
+              <button className="notes-tag-chip clear" onClick={()=>setFilterTag("")}>
+                <X size={10}/> Clear
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Stats ── */}
+      <div className="notes-stats">
+        <span className="notes-stat">
+          <StickyNote size={13}/> {notes.length} total
+        </span>
+        {search || filterClass!=="all" || filterTag ? (
+          <span className="notes-stat filtered">
+            {filtered.length} matching
+          </span>
+        ) : null}
+      </div>
+
+      {/* ── Notes grouped by class ── */}
+      {Object.keys(grouped).length === 0 ? (
         <div className="empty-state">
-          <div className="empty-icon">📝</div>
-          <h2>No notes yet</h2>
-          <p>Start taking notes to keep track of your lectures</p>
+          <div className="empty-state-icon">📝</div>
+          <h3>{notes.length===0 ? "No notes yet" : "No notes match your filters"}</h3>
+          <p>{notes.length===0 ? "Add your first note to start building your knowledge base" : "Try adjusting your search or filters"}</p>
+          {notes.length===0 && (
+            <button className="btn btn-primary" style={{marginTop:"1rem"}} onClick={openAdd}>
+              <Plus size={15}/> Create First Note
+            </button>
+          )}
         </div>
       ) : (
-        <div className="notes-grid">
-          {Object.values(groupedNotes).map(({ class: cls, notes: classNotes }) => (
-            <div key={cls.id} className="class-section">
-              <div
-                className="class-header"
-                style={{
-                  borderLeft: `4px solid ${cls.color}`,
-                  background: `linear-gradient(135deg, ${cls.color}15 0%, ${cls.color}05 100%)`,
-                }}
-              >
-                <div
-                  className="class-icon"
-                  style={{ backgroundColor: cls.color }}
-                />
-                <div className="class-info">
-                  <h2 className="class-code">{cls.course_code}</h2>
-                  <p className="class-name">{cls.course_name}</p>
-                </div>
-                <div className="note-count">{classNotes.length} notes</div>
+        <div className="notes-groups">
+          {Object.entries(grouped).map(([key, {cls, notes:clsNotes}])=>{
+            const isOpen = expandedClasses[key] !== false;
+            return (
+              <div key={key} className="notes-group">
+                {/* Group header */}
+                <button
+                  className="notes-group-header"
+                  style={{borderLeftColor: cls?.color||"#6366f1"}}
+                  onClick={()=>toggleGroup(key)}
+                >
+                  <div className="notes-group-identity">
+                    {cls ? (
+                      <>
+                        <span className="notes-group-code" style={{color:cls.color||"#818cf8"}}>
+                          {cls.course_code}
+                        </span>
+                        <span className="notes-group-name">{cls.course_name}</span>
+                      </>
+                    ) : (
+                      <span className="notes-group-code" style={{color:"var(--text-muted)"}}>
+                        General
+                      </span>
+                    )}
+                  </div>
+                  <div className="notes-group-right">
+                    <span className="notes-group-count">{clsNotes.length}</span>
+                    {isOpen ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
+                  </div>
+                </button>
+
+                {/* Note cards grid */}
+                {isOpen && (
+                  <div className="notes-cards-grid">
+                    {clsNotes.map(note=>(
+                      <div
+                        key={note.id}
+                        className="note-card"
+                        style={{"--note-color": cls?.color||"#6366f1"}}
+                        onClick={()=>setViewingNote(note)}
+                      >
+                        {/* Top accent line */}
+                        <div className="note-card-accent" style={{background:cls?.color||"#6366f1"}}/>
+
+                        {/* Card body */}
+                        <div className="note-card-body">
+                          <div className="note-card-top">
+                            <h3 className="note-card-title">{note.title}</h3>
+                            <div className="note-card-actions" onClick={e=>e.stopPropagation()}>
+                              <button
+                                className="btn-icon note-action"
+                                onClick={()=>openEdit(note)}
+                                title="Edit"
+                              >
+                                <Edit2 size={13}/>
+                              </button>
+                              <button
+                                className="btn-icon note-action note-del"
+                                onClick={()=>setDeleteTarget(note)}
+                                title="Delete"
+                              >
+                                <Trash2 size={13}/>
+                              </button>
+                            </div>
+                          </div>
+
+                          {note.lecture_date && (
+                            <div className="note-card-date">
+                              <Clock size={11}/>
+                              {formatDate(note.lecture_date)}
+                            </div>
+                          )}
+
+                          {/* Content preview */}
+                          <p className="note-card-preview">
+                            {note.content
+                              ? note.content.substring(0,120)+(note.content.length>120?"…":"")
+                              : <span className="note-empty-preview">No content yet</span>
+                            }
+                          </p>
+
+                          {/* Tags */}
+                          {note.tags?.length > 0 && (
+                            <div className="note-card-tags">
+                              {note.tags.slice(0,4).map(t=>(
+                                <span key={t} className="note-tag">
+                                  <Hash size={9}/>{t}
+                                </span>
+                              ))}
+                              {note.tags.length>4 && (
+                                <span className="note-tag note-tag-more">
+                                  +{note.tags.length-4}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Add note to class shortcut */}
+                    <button
+                      className="note-add-card"
+                      onClick={e=>{e.stopPropagation();setForm(f=>({...blankForm,class_id:cls?.id||""}));setEditingNote(null);setTagInput("");setIsModalOpen(true);}}
+                    >
+                      <Plus size={20}/>
+                      <span>New note for {cls?.course_code||"this class"}</span>
+                    </button>
+                  </div>
+                )}
               </div>
-
-              <div className="notes-list">
-  {classNotes.map((note) => (
-    <div 
-      key={note.id} 
-      className="note-card"
-      onClick={() => setViewingNote(note)} 
-      style={{ cursor: 'pointer' }}
-    >
-      <div className="note-header">
-        <h3 className="note-title">{note.title}</h3>
-        <div className="note-actions" onClick={(e) => e.stopPropagation()}>
-          <button
-            className="action-btn edit-btn"
-            onClick={() => handleEdit(note)}
-            title="Edit"
-          >
-            ✎
-          </button>
-          <button
-            className="action-btn delete-btn"
-            onClick={() => {
-              setNoteToDelete(note);
-              setShowDeleteDialog(true);
-            }}
-            title="Delete"
-          >
-            ✕
-          </button>
-        </div>
-      </div>
-
-      {note.lecture_date && (
-        <div className="note-date">
-          {(() => {
-            const [year, month, day] = note.lecture_date.split('-').map(Number);
-            return new Date(year, month - 1, day).toLocaleDateString("en-US", {
-              month: "long",
-              day: "numeric",
-              year: "numeric",
-            });
-          })()}
+            );
+          })}
         </div>
       )}
 
-      {/* Note content snippet */}
-      <div className="note-content" style={{
-        display: '-webkit-box',
-        WebkitLineClamp: '3',
-        WebkitBoxOrient: 'vertical',
-        overflow: 'hidden'
-      }}>
-        {note.content}
-      </div>
-
-      {note.tags && note.tags.length > 0 && (
-        <div className="note-tags">
-          {note.tags.map((tag, idx) => (
-            <span key={idx} className="note-tag">
-              #{tag}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  ))}
-</div>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* ══════════════ VIEW NOTE MODAL ══════════════ */}
       {viewingNote && (
-        <div className="modal-overlay" onClick={() => setViewingNote(null)}>
-          <div className="modal-content view-note-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={()=>setViewingNote(null)}>
+          <div className="modal modal-lg notes-view-modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-header">
-              <div>
-                <h2 style={{ margin: 0 }}>{viewingNote.title}</h2>
-                <span className="note-date">
-                  {viewingNote.lecture_date && (() => {
-                    const [year, month, day] = viewingNote.lecture_date.split('-').map(Number);
-                    return new Date(year, month - 1, day).toLocaleDateString();
-                  })()}
-                </span>
+              <div className="notes-view-header-left">
+                {(() => {
+                  const cls = classes.find(c=>c.id===viewingNote.class_id);
+                  return cls ? (
+                    <span className="notes-view-course" style={{color:cls.color}}>
+                      {cls.course_code}
+                    </span>
+                  ) : null;
+                })()}
+                <h2 className="notes-view-title">{viewingNote.title}</h2>
               </div>
-              <button className="close-btn" onClick={() => setViewingNote(null)}>✕</button>
+              <div className="notes-view-actions">
+                <button
+                  className="btn btn-secondary"
+                  onClick={()=>exportNote(viewingNote)}
+                  title="Export as text"
+                >
+                  <Download size={14}/> Export
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={()=>{setViewingNote(null);openEdit(viewingNote);}}
+                >
+                  <Edit2 size={14}/> Edit
+                </button>
+                <button className="btn-icon" onClick={()=>setViewingNote(null)}>
+                  <X size={16}/>
+                </button>
+              </div>
             </div>
 
-            <div className="modal-body" style={{ padding: '1.5rem', maxHeight: '70vh', overflowY: 'auto' }}>
-              <p style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6', fontSize: '1.1rem' }}>
-                {viewingNote.content}
-              </p>
-              
-              {viewingNote.tags && (
-                <div className="note-tags" style={{ marginTop: '2rem' }}>
-                  {viewingNote.tags.map((tag, i) => (
-                    <span key={i} className="note-tag">#{tag}</span>
-                  ))}
+            <div className="notes-view-body">
+              {viewingNote.lecture_date && (
+                <div className="notes-view-date">
+                  <Clock size={13}/>
+                  {formatDate(viewingNote.lecture_date)}
                 </div>
               )}
-            </div>
 
-            <div className="form-actions">
-              <button className="cancel-btn" onClick={() => setViewingNote(null)}>
-                Close
-              </button>
-              
-              <button className="export-pdf-btn" onClick={() => handleExportPDF(viewingNote)}>
-                <span className="btn-icon">📄</span> Export PDF
-              </button>
-
-              <button className="submit-btn" onClick={() => {
-                handleEdit(viewingNote);
-                setViewingNote(null);
-              }}>
-                Edit Note
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add/Edit Dialog */}
-      {isDialogOpen && (
-        <div className="modal-overlay" onClick={() => setIsDialogOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>{editingNote ? "Edit Note" : "New Note"}</h2>
-              <button
-                className="close-btn"
-                onClick={() => setIsDialogOpen(false)}
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="note-form">
-              <div className="form-group">
-                <label>Class *</label>
-                <select
-                  value={formData.class_id}
-                  onChange={(e) =>
-                    setFormData({ ...formData, class_id: e.target.value })
-                  }
-                  required
-                  className="form-select"
-                >
-                  <option value="">Select a class</option>
-                  {classes.map((cls) => (
-                    <option key={cls.id} value={cls.id}>
-                      {cls.course_code} - {cls.course_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label>Title *</label>
-                <input
-                  type="text"
-                  value={formData.title}
-                  onChange={(e) =>
-                    setFormData({ ...formData, title: e.target.value })
-                  }
-                  placeholder="Note title"
-                  required
-                  className="form-input"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Lecture Date *</label>
-                <input
-                  type="date"
-                  value={formData.lecture_date}
-                  onChange={(e) =>
-                    setFormData({ ...formData, lecture_date: e.target.value })
-                  }
-                  required
-                  className="form-input"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Content</label>
-                <textarea
-                  value={formData.content}
-                  onChange={(e) =>
-                    setFormData({ ...formData, content: e.target.value })
-                  }
-                  placeholder="Your notes..."
-                  rows={10}
-                  className="form-textarea"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Tags</label>
-                <div className="tag-input-container">
-                  <input
-                    type="text"
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    placeholder="Add tag"
-                    onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addTag())}
-                    className="form-input"
-                  />
-                  <button
-                    type="button"
-                    onClick={addTag}
-                    className="add-tag-btn"
-                  >
-                    Add
-                  </button>
-                </div>
-                <div className="tags-display">
-                  {formData.tags.map((tag, idx) => (
-                    <span key={idx} className="tag-chip">
-                      #{tag}
-                      <button
-                        type="button"
-                        onClick={() => removeTag(tag)}
-                        className="remove-tag-btn"
-                      >
-                        ✕
-                      </button>
+              {viewingNote.tags?.length>0 && (
+                <div className="notes-view-tags">
+                  {viewingNote.tags.map(t=>(
+                    <span key={t} className="note-tag note-tag-lg">
+                      <Hash size={11}/>{t}
                     </span>
                   ))}
                 </div>
+              )}
+
+              <div className="notes-view-divider"/>
+
+              <div className="notes-view-content">
+                {viewingNote.content
+                  ? viewingNote.content.split("\n").map((line,i)=>(
+                      line.trim()
+                        ? <p key={i}>{line}</p>
+                        : <div key={i} className="notes-line-break"/>
+                    ))
+                  : <p className="notes-no-content">No content yet.</p>
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════ ADD / EDIT MODAL ══════════════ */}
+      {isModalOpen && (
+        <div className="modal-overlay" onClick={closeModal}>
+          <div className="modal modal-lg" onClick={e=>e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>{editingNote ? "Edit Note" : "New Note"}</h2>
+              <button className="btn-icon" onClick={closeModal}><X size={16}/></button>
+            </div>
+
+            <form onSubmit={handleSubmit}>
+              <div className="modal-body notes-form">
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Class</label>
+                    <select
+                      className="form-control"
+                      value={form.class_id}
+                      onChange={e=>setForm(f=>({...f,class_id:e.target.value}))}
+                    >
+                      <option value="">— General / No class —</option>
+                      {classes.map(c=>(
+                        <option key={c.id} value={c.id}>
+                          {c.course_code} · {c.course_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Lecture Date</label>
+                    <input
+                      type="date" className="form-control"
+                      value={form.lecture_date}
+                      onChange={e=>setForm(f=>({...f,lecture_date:e.target.value}))}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>Title *</label>
+                  <input
+                    className="form-control"
+                    placeholder="e.g. Lecture 5 — Recursion"
+                    value={form.title}
+                    onChange={e=>setForm(f=>({...f,title:e.target.value}))}
+                    required autoFocus
+                  />
+                </div>
+
+                <div className="form-group notes-content-group">
+                  <label>Content</label>
+                  <textarea
+                    className="form-control notes-textarea"
+                    rows={14}
+                    placeholder={"Write your notes here…\n\nTips:\n• Use blank lines between sections\n• Paste code snippets, formulas, key terms\n• Add definitions, examples, or summaries"}
+                    value={form.content}
+                    onChange={e=>setForm(f=>({...f,content:e.target.value}))}
+                  />
+                  <div className="notes-char-count">
+                    {form.content.length} chars · {form.content.split(/\s+/).filter(Boolean).length} words
+                  </div>
+                </div>
+
+                {/* Tags */}
+                <div className="form-group">
+                  <label>Tags</label>
+                  <div className="notes-tag-input-row">
+                    <div className="notes-tag-input-wrap">
+                      <Hash size={13} className="notes-tag-input-icon"/>
+                      <input
+                        className="notes-tag-input"
+                        placeholder="Add tag and press Enter"
+                        value={tagInput}
+                        onChange={e=>setTagInput(e.target.value)}
+                        onKeyDown={e=>{
+                          if(e.key==="Enter"){e.preventDefault();addTag();}
+                          if(e.key===","){ e.preventDefault();addTag();}
+                        }}
+                      />
+                    </div>
+                    <button type="button" className="btn btn-secondary" onClick={addTag}>
+                      Add
+                    </button>
+                  </div>
+                  {form.tags.length > 0 && (
+                    <div className="notes-tags-display">
+                      {form.tags.map(t=>(
+                        <span key={t} className="note-tag note-tag-removable">
+                          <Hash size={9}/>{t}
+                          <button type="button" onClick={()=>removeTag(t)}>
+                            <X size={9}/>
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="form-actions">
-                <button
-                  type="button"
-                  onClick={() => setIsDialogOpen(false)}
-                  className="cancel-btn"
-                >
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={closeModal}>
                   Cancel
                 </button>
-                <button type="submit" className="submit-btn">
-                  {editingNote ? "Update Note" : "Create Note"}
+                <button type="submit" className="btn btn-primary" disabled={saving}>
+                  {saving ? "Saving…" : editingNote ? "Update Note" : "Save Note"}
                 </button>
               </div>
             </form>
@@ -555,24 +588,21 @@ export default function Notes() {
         </div>
       )}
 
-      {/* Delete Confirmation Dialog */}
-      {showDeleteDialog && (
-        <div className="modal-overlay" onClick={() => setShowDeleteDialog(false)}>
-          <div className="delete-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="delete-icon">⚠</div>
-            <h3>Delete Note?</h3>
-            <p>Are you sure you want to delete "{noteToDelete?.title}"?</p>
-            <p className="warning-text">This action cannot be undone.</p>
-            <div className="dialog-actions">
-              <button
-                onClick={() => setShowDeleteDialog(false)}
-                className="cancel-btn"
-              >
-                Cancel
-              </button>
-              <button onClick={handleDelete} className="confirm-delete-btn">
-                Delete
-              </button>
+      {/* ══════════════ DELETE CONFIRM ══════════════ */}
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={()=>setDeleteTarget(null)}>
+          <div className="modal delete-modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-body" style={{textAlign:"center",padding:"2rem 1.5rem"}}>
+              <div className="delete-modal-icon">🗑️</div>
+              <h3 style={{color:"var(--text-primary)",marginBottom:"0.5rem"}}>Delete Note?</h3>
+              <p style={{color:"var(--text-muted)",fontSize:"0.875rem"}}>
+                <strong style={{color:"var(--text-secondary)"}}>{deleteTarget.title}</strong><br/>
+                This cannot be undone.
+              </p>
+            </div>
+            <div className="modal-footer" style={{justifyContent:"center"}}>
+              <button className="btn btn-secondary" onClick={()=>setDeleteTarget(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={handleDelete}>Delete</button>
             </div>
           </div>
         </div>

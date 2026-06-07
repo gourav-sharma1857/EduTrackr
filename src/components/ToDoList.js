@@ -1,514 +1,445 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
-  collection,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  onSnapshot,
-  doc,
-  query,
-  where,
+  collection, query, where, onSnapshot,
+  addDoc, updateDoc, deleteDoc, doc
 } from "firebase/firestore";
 import { db, auth } from "../firebase.js";
 import { onAuthStateChanged } from "firebase/auth";
+import {
+  Plus, Trash2, Edit2, CheckCircle, Circle,
+  X, Clock, Flag, Tag, ChevronDown, ChevronUp,
+  CheckSquare, LayoutList, Sparkles
+} from "lucide-react";
 import "../styles/ToDoList.css";
 
-const PRIORITIES = ["Low", "Medium", "High"];
-const CATEGORIES = ["Personal", "Academic", "Work", "Other"];
+const PRIORITIES = ["High","Medium","Low"];
+const CATEGORIES = ["Personal","Academic","Work","Health","Finance","Other"];
+
+const PRIORITY_META = {
+  High:   { color:"#ef4444", bg:"rgba(239,68,68,0.12)",   border:"rgba(239,68,68,0.25)"   },
+  Medium: { color:"#f59e0b", bg:"rgba(245,158,11,0.12)",  border:"rgba(245,158,11,0.25)"  },
+  Low:    { color:"#10b981", bg:"rgba(16,185,129,0.12)",  border:"rgba(16,185,129,0.25)"  },
+};
+
+const CATEGORY_COLORS = {
+  Personal: "#8b5cf6", Academic: "#3b82f6", Work: "#10b981",
+  Health: "#f97316", Finance: "#f59e0b", Other: "#64748b",
+};
 
 export default function ToDoList() {
-  const [user, setUser] = useState(null);
-  const [todos, setTodos] = useState([]);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingTodo, setEditingTodo] = useState(null);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [todoToDelete, setTodoToDelete] = useState(null);
-  const [showCompleteNotif, setShowCompleteNotif] = useState(false);
-  const [completedTodoTitle, setCompletedTodoTitle] = useState("");
+  const [user, setUser]             = useState(null);
+  const [todos, setTodos]           = useState([]);
+  const [filter, setFilter]         = useState("active");  // active | completed | all
   const [filterPriority, setFilterPriority] = useState("all");
   const [filterCategory, setFilterCategory] = useState("all");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTodo, setEditingTodo] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [completedMsg, setCompletedMsg] = useState("");
+  const [saving, setSaving]         = useState(false);
 
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    due_date: "",
-    priority: "Medium",
-    category: "Personal",
-    is_completed: false,
-  });
+  const blankForm = {
+    title:"", description:"", due_date:"",
+    priority:"Medium", category:"Personal", is_completed:false,
+  };
+  const [form, setForm] = useState(blankForm);
 
+  /* ── Auth ── */
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-    });
+    const unsub = onAuthStateChanged(auth, u => setUser(u));
     return () => unsub();
   }, []);
 
+  /* ── Firestore ── */
   useEffect(() => {
-    if (!user) {
-      setTodos([]);
-      return;
-    }
-    const q = query(
-      collection(db, "todos"),
-      where("uid", "==", user.uid)
+    if (!user) return;
+    const q = query(collection(db,"todos"), where("uid","==",user.uid));
+    const unsub = onSnapshot(q, s =>
+      setTodos(s.docs.map(d=>({id:d.id,...d.data()}))
+        .sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)))
     );
-    const unsub = onSnapshot(q, (snapshot) => {
-      const fetched = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-
-      fetched.sort((a, b) => {
-        const dateA = a.created_at ? new Date(a.created_at) : new Date(0);
-        const dateB = b.created_at ? new Date(b.created_at) : new Date(0);
-        return dateB - dateA;
-      });
-      setTodos(fetched);
-    });
     return () => unsub();
   }, [user]);
 
-  const resetForm = () => {
-    setFormData({
-      title: "",
-      description: "",
-      due_date: "",
-      priority: "Medium",
-      category: "Personal",
-      is_completed: false,
+  /* ── Filtered + sorted ── */
+  const filtered = useMemo(() => {
+    return todos.filter(t => {
+      const matchFilter   = filter==="all" || (filter==="active"?!t.is_completed:t.is_completed);
+      const matchPriority = filterPriority==="all" || t.priority===filterPriority;
+      const matchCategory = filterCategory==="all" || t.category===filterCategory;
+      return matchFilter && matchPriority && matchCategory;
+    }).sort((a,b) => {
+      // Priority sort: High > Medium > Low > none, then by due date
+      const pOrder = {High:0, Medium:1, Low:2};
+      const pa = pOrder[a.priority]??3, pb = pOrder[b.priority]??3;
+      if (pa!==pb) return pa-pb;
+      return new Date(a.due_date||"9999") - new Date(b.due_date||"9999");
     });
+  }, [todos, filter, filterPriority, filterCategory]);
+
+  /* ── Grouped by category ── */
+  const grouped = useMemo(() => {
+    if (filter==="all" || filtered.length===0) return null;
+    const map = {};
+    filtered.forEach(t => {
+      const c = t.category||"Other";
+      if (!map[c]) map[c]=[];
+      map[c].push(t);
+    });
+    return map;
+  }, [filtered, filter]);
+
+  /* ── Stats ── */
+  const stats = useMemo(() => ({
+    active:    todos.filter(t=>!t.is_completed).length,
+    completed: todos.filter(t=>t.is_completed).length,
+    high:      todos.filter(t=>!t.is_completed&&t.priority==="High").length,
+    due:       todos.filter(t=>!t.is_completed&&t.due_date&&new Date(t.due_date).toDateString()===new Date().toDateString()).length,
+  }), [todos]);
+
+  /* ── CRUD ── */
+  const openAdd = (cat="") => {
+    setForm({...blankForm, category:cat||"Personal"});
     setEditingTodo(null);
+    setIsModalOpen(true);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!user) {
-      alert("Please sign in to add tasks");
-      return;
-    }
+  const openEdit = t => {
+    setEditingTodo(t);
+    setForm({
+      title:t.title||"", description:t.description||"",
+      due_date:t.due_date||"", priority:t.priority||"Medium",
+      category:t.category||"Personal", is_completed:t.is_completed||false,
+    });
+    setIsModalOpen(true);
+  };
 
+  const closeModal = () => { setIsModalOpen(false); setEditingTodo(null); };
+
+  const handleSubmit = async e => {
+    e.preventDefault(); setSaving(true);
     try {
       if (editingTodo) {
-        const docRef = doc(db, "todos", editingTodo.id);
-        await updateDoc(docRef, {
-          ...formData,
-          updated_at: new Date().toISOString(),
+        await updateDoc(doc(db,"todos",editingTodo.id),{
+          ...form, updated_at:new Date().toISOString()
         });
       } else {
-        await addDoc(collection(db, "todos"), {
-          ...formData,
-          uid: user.uid,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+        await addDoc(collection(db,"todos"),{
+          ...form, uid:user.uid,
+          created_at:new Date().toISOString(),
+          updated_at:new Date().toISOString(),
         });
       }
-      resetForm();
-      setIsDialogOpen(false);
-    } catch (err) {
-      console.error("Error saving todo:", err);
-      alert("Failed to save task: " + err.message);
-    }
+      closeModal();
+    } catch(err){ console.error(err); }
+    setSaving(false);
   };
 
-  
-  const handleEdit = (todo) => {
-    setEditingTodo(todo);
-    setFormData({
-      title: todo.title || "",
-      description: todo.description || "",
-      due_date: todo.due_date || "",
-      priority: todo.priority || "Medium",
-      category: todo.category || "Personal",
-      is_completed: todo.is_completed || false,
+  const toggleComplete = async t => {
+    const next = !t.is_completed;
+    await updateDoc(doc(db,"todos",t.id),{
+      is_completed:next, updated_at:new Date().toISOString()
     });
-    setIsDialogOpen(true);
-  };
-
-  const toggleComplete = async (todo) => {
-    try {
-      const docRef = doc(db, "todos", todo.id);
-      const newStatus = !todo.is_completed;
-      await updateDoc(docRef, {
-        is_completed: newStatus,
-        updated_at: new Date().toISOString(),
-      });
-
-      if (newStatus) {
-        setCompletedTodoTitle(todo.title);
-        setShowCompleteNotif(true);
-        setTimeout(() => setShowCompleteNotif(false), 3000);
-      }
-    } catch (err) {
-      console.error("Error toggling todo:", err);
-      alert("Failed to update task: " + err.message);
+    if (next) {
+      setCompletedMsg(t.title);
+      setTimeout(()=>setCompletedMsg(""), 3000);
     }
-  };
-
-  const confirmDelete = (todo) => {
-    setTodoToDelete(todo);
-    setShowDeleteDialog(true);
   };
 
   const handleDelete = async () => {
-    if (!todoToDelete) return;
-
-    try {
-      await deleteDoc(doc(db, "todos", todoToDelete.id));
-      setShowDeleteDialog(false);
-      setTodoToDelete(null);
-    } catch (err) {
-      console.error("Error deleting todo:", err);
-      alert("Failed to delete task: " + err.message);
-    }
+    if (!deleteTarget) return;
+    await deleteDoc(doc(db,"todos",deleteTarget.id));
+    setDeleteTarget(null);
   };
 
-  const activeTodos = todos.filter((t) => !t.is_completed);
-  const completedTodos = todos.filter((t) => t.is_completed);
-
-  const filterTodos = (todoList) => {
-    return todoList.filter((todo) => {
-      const matchesPriority =
-        filterPriority === "all" || todo.priority === filterPriority;
-      const matchesCategory =
-        filterCategory === "all" || todo.category === filterCategory;
-      return matchesPriority && matchesCategory;
-    });
+  const formatDue = ds => {
+    if (!ds) return null;
+    const d    = new Date(ds);
+    const now  = new Date();
+    const diff = Math.ceil((d-now)/86400000);
+    if (diff < 0)  return { label:"Overdue",  cls:"due-overdue" };
+    if (diff === 0) return { label:"Today",   cls:"due-today" };
+    if (diff === 1) return { label:"Tomorrow",cls:"due-tomorrow" };
+    if (diff <= 7)  return { label:`${diff}d`, cls:"due-soon" };
+    return { label:d.toLocaleDateString("en-US",{month:"short",day:"numeric"}), cls:"" };
   };
 
-  const filteredActive = filterTodos(activeTodos);
-  const filteredCompleted = filterTodos(completedTodos);
-
-  const getPriorityClass = (priority) => {
-    switch (priority) {
-      case "High":
-        return "priority-high";
-      case "Medium":
-        return "priority-medium";
-      case "Low":
-        return "priority-low";
-      default:
-        return "";
-    }
-  };
-
-  const getCategoryColor = (category) => {
-    switch (category) {
-      case "Personal":
-        return "#8b5cf6";
-      case "Academic":
-        return "#3b82f6";
-      case "Work":
-        return "#10b981";
-      case "Other":
-        return "#f59e0b";
-      default:
-        return "#6366f1";
-    }
-  };
-
-   if (!user) {
+  /* ── Todo card ── */
+  const TodoItem = ({t, showCategory=false}) => {
+    const p   = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
+    const due = formatDue(t.due_date);
     return (
-      <div className="todo-empty">
-        <div className="empty-icon">🔒</div>
-        <h2>Please sign in to view tasks</h2>
-      </div>
-    );
-  }
+      <div className={`todo-item ${t.is_completed?"todo-done":""} priority-${t.priority?.toLowerCase()}`}>
+        {/* Priority left bar */}
+        <div className="todo-priority-bar" style={{background:p.color}}/>
 
-  return (
-    <div className="todo-container">
-      {/* Header */}
-      <div className="todo-header">
-        <div className="header-stats">
-          <div className="stat-card">
-            <div className="stat-value">{activeTodos.length}</div>
-            <div className="stat-label">Active Tasks</div>
+        {/* Complete button */}
+        <button
+          className="todo-check-btn"
+          onClick={()=>toggleComplete(t)}
+          title={t.is_completed?"Mark active":"Mark complete"}
+        >
+          {t.is_completed
+            ? <CheckCircle size={20} className="todo-check-icon done"/>
+            : <Circle      size={20} className="todo-check-icon pending"/>
+          }
+        </button>
+
+        {/* Main content */}
+        <div className="todo-content">
+          <div className="todo-title-row">
+            <span className={`todo-title ${t.is_completed?"todo-strikethrough":""}`}>
+              {t.title}
+            </span>
+            {showCategory && (
+              <span className="todo-cat-badge"
+                style={{
+                  background:CATEGORY_COLORS[t.category]+"18",
+                  color:CATEGORY_COLORS[t.category],
+                  border:`1px solid ${CATEGORY_COLORS[t.category]}33`
+                }}>
+                {t.category}
+              </span>
+            )}
           </div>
-          <div className="stat-card">
-            <div className="stat-value">{completedTodos.length}</div>
-            <div className="stat-label">Completed</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-value">
-              {activeTodos.filter((t) => t.priority === "High").length}
-            </div>
-            <div className="stat-label">High Priority</div>
+          {t.description && (
+            <p className="todo-desc">{t.description}</p>
+          )}
+          <div className="todo-meta-row">
+            <span className="todo-priority-tag"
+              style={{background:p.bg, color:p.color, border:`1px solid ${p.border}`}}>
+              <Flag size={9}/> {t.priority}
+            </span>
+            {due && (
+              <span className={`todo-due ${due.cls}`}>
+                <Clock size={10}/> {due.label}
+              </span>
+            )}
           </div>
         </div>
 
-        <div className="header-actions">
-          <select
-            className="filter-select"
-            value={filterPriority}
-            onChange={(e) => setFilterPriority(e.target.value)}
-          >
-            <option value="all">All Priorities</option>
-            {PRIORITIES.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-
-          <select
-            className="filter-select"
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-          >
-            <option value="all">All Categories</option>
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-
-          <button
-            className="add-todo-btn"
-            onClick={() => {
-              resetForm();
-              setIsDialogOpen(true);
-            }}
-          >
-            <span className="btn-icon">+</span>
-            <span>New Task</span>
+        {/* Actions */}
+        <div className="todo-actions">
+          <button className="btn-icon todo-action" onClick={()=>openEdit(t)} title="Edit">
+            <Edit2 size={13}/>
+          </button>
+          <button className="btn-icon todo-action todo-del"
+            onClick={()=>setDeleteTarget(t)} title="Delete">
+            <Trash2 size={13}/>
           </button>
         </div>
       </div>
+    );
+  };
 
-      {/* Active Todos */}
-      <div className="todos-section">
-        <div className="section-header">
-          <h2 className="section-title">Active Tasks</h2>
-          <div className="section-badge">{filteredActive.length}</div>
+  if (!user) return <div className="todo-signin">Please sign in to view To-Do List</div>;
+
+  return (
+    <div className="todo-page">
+      {/* ── Header ── */}
+      <div className="todo-header">
+        <div>
+          <h1>To-Do List</h1>
+          <p>Stay on top of everything that matters</p>
         </div>
-
-        {filteredActive.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-icon">✓</div>
-            <p>No active tasks. Great job!</p>
-          </div>
-        ) : (
-          <div className="todos-grid">
-            {filteredActive.map((todo) => (
-              <div key={todo.id} className={`todo-card ${getPriorityClass(todo.priority)}`}>
-                <div className="todo-card-header">
-                  <button
-                    className="checkbox-btn"
-                    onClick={() => toggleComplete(todo)}
-                  >
-                    <div className="checkbox-outer">
-                      <div className="checkbox-inner"></div>
-                    </div>
-                  </button>
-
-                  <div className="todo-info">
-                    <h3 className="todo-title">{todo.title}</h3>
-                    {todo.description && (
-                      <p className="todo-description">{todo.description}</p>
-                    )}
-                  </div>
-
-                  <div className="todo-actions">
-                    <button
-                      className="action-btn edit-btn"
-                      onClick={() => handleEdit(todo)}
-                      title="Edit"
-                    >
-                      ✎
-                    </button>
-                    <button
-                      className="action-btn delete-btn"
-                      onClick={() => confirmDelete(todo)}
-                      title="Delete"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-
-                <div className="todo-meta">
-                  <span
-                    className="category-badge"
-                    style={{
-                      backgroundColor: `${getCategoryColor(todo.category)}20`,
-                      borderColor: getCategoryColor(todo.category),
-                      color: getCategoryColor(todo.category),
-                    }}
-                  >
-                    {todo.category}
-                  </span>
-
-                  <span className={`priority-badge ${getPriorityClass(todo.priority)}`}>
-                    {todo.priority}
-                  </span>
-
-                  {todo.due_date && (
-                    <span className="due-date">
-                      Due: {new Date(todo.due_date).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <button className="btn btn-primary" onClick={()=>openAdd()}>
+          <Plus size={16}/> New Task
+        </button>
       </div>
 
-      {/* Completed Todos */}
-      {filteredCompleted.length > 0 && (
-        <div className="todos-section completed-section">
-          <div className="section-header">
-            <h2 className="section-title">Completed Tasks</h2>
-            <div className="section-badge">{filteredCompleted.length}</div>
+      {/* ── Stats strip ── */}
+      <div className="todo-stats stagger-1">
+        <div className="todo-stat" onClick={()=>setFilter("active")}>
+          <span className="todo-stat-val">{stats.active}</span>
+          <span className="todo-stat-label">Active</span>
+        </div>
+        <div className="todo-stat-div"/>
+        <div className="todo-stat" onClick={()=>setFilter("completed")}>
+          <span className="todo-stat-val" style={{color:"#10b981"}}>{stats.completed}</span>
+          <span className="todo-stat-label">Completed</span>
+        </div>
+        <div className="todo-stat-div"/>
+        <div className="todo-stat">
+          <span className="todo-stat-val" style={{color:"#ef4444"}}>{stats.high}</span>
+          <span className="todo-stat-label">High Priority</span>
+        </div>
+        <div className="todo-stat-div"/>
+        <div className="todo-stat">
+          <span className="todo-stat-val" style={{color:"#f59e0b"}}>{stats.due}</span>
+          <span className="todo-stat-label">Due Today</span>
+        </div>
+      </div>
+
+      {/* ── Filter row ── */}
+      <div className="todo-filters stagger-2">
+        <div className="todo-filter-tabs">
+          {["active","completed","all"].map(f=>(
+            <button key={f}
+              className={"todo-filter-tab"+(filter===f?" active":"")}
+              onClick={()=>setFilter(f)}>
+              {f==="active"?"Active":f==="completed"?"Completed":"All"}
+              <span className="todo-filter-count">
+                {f==="active"?stats.active:f==="completed"?stats.completed:todos.length}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="todo-filter-selects">
+          <select className="todo-filter-select" value={filterPriority}
+            onChange={e=>setFilterPriority(e.target.value)}>
+            <option value="all">All Priorities</option>
+            {PRIORITIES.map(p=><option key={p}>{p}</option>)}
+          </select>
+          <select className="todo-filter-select" value={filterCategory}
+            onChange={e=>setFilterCategory(e.target.value)}>
+            <option value="all">All Categories</option>
+            {CATEGORIES.map(c=><option key={c}>{c}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* ── Content ── */}
+      {filtered.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-state-icon">
+            {filter==="completed" ? "🎉" : filter==="active" && todos.length>0 ? "✅" : "📋"}
           </div>
-
-          <div className="todos-grid">
-            {filteredCompleted.map((todo) => (
-              <div key={todo.id} className="todo-card completed">
-                <div className="todo-card-header">
-                  <button
-                    className="checkbox-btn checked"
-                    onClick={() => toggleComplete(todo)}
-                  >
-                    <div className="checkbox-outer">
-                      <div className="checkbox-inner checked">✓</div>
-                    </div>
-                  </button>
-
-                  <div className="todo-info">
-                    <h3 className="todo-title">{todo.title}</h3>
-                    {todo.description && (
-                      <p className="todo-description">{todo.description}</p>
-                    )}
+          <h3>
+            {filter==="completed" && todos.filter(t=>t.is_completed).length===0
+              ? "No completed tasks yet"
+              : filter==="active" && todos.length>0
+              ? "All tasks done!"
+              : todos.length===0
+              ? "No tasks yet"
+              : "No tasks match your filters"}
+          </h3>
+          {todos.length===0 && (
+            <button className="btn btn-primary" style={{marginTop:"1rem"}} onClick={()=>openAdd()}>
+              <Plus size={15}/> Create First Task
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="todo-content stagger-3">
+          {/* Grouped by category view (active/completed) */}
+          {grouped ? (
+            <div className="todo-grouped">
+              {CATEGORIES.filter(c=>grouped[c]).map(cat=>(
+                <div key={cat} className="todo-cat-group">
+                  <div className="todo-cat-header">
+                    <span className="todo-cat-dot"
+                      style={{background:CATEGORY_COLORS[cat]}}/>
+                    <span className="todo-cat-name"
+                      style={{color:CATEGORY_COLORS[cat]}}>
+                      {cat}
+                    </span>
+                    <span className="todo-cat-count">{grouped[cat].length}</span>
+                    <button
+                      className="todo-cat-add"
+                      onClick={()=>openAdd(cat)}
+                      title={`Add ${cat} task`}
+                    >
+                      <Plus size={12}/>
+                    </button>
                   </div>
-
-                  <button
-                    className="action-btn delete-btn"
-                    onClick={() => confirmDelete(todo)}
-                    title="Delete"
-                  >
-                    ✕
-                  </button>
+                  <div className="todo-list">
+                    {grouped[cat].map(t=>(
+                      <TodoItem key={t.id} t={t} showCategory={false}/>
+                    ))}
+                  </div>
                 </div>
-
-                <div className="todo-meta">
-                  <span
-                    className="category-badge"
-                    style={{
-                      backgroundColor: `${getCategoryColor(todo.category)}20`,
-                      borderColor: getCategoryColor(todo.category),
-                      color: getCategoryColor(todo.category),
-                    }}
-                  >
-                    {todo.category}
-                  </span>
+              ))}
+              {/* "Other" catch-all */}
+              {grouped["Other"] && (
+                <div key="Other" className="todo-cat-group">
+                  <div className="todo-cat-header">
+                    <span className="todo-cat-dot" style={{background:"#64748b"}}/>
+                    <span className="todo-cat-name" style={{color:"#64748b"}}>Other</span>
+                    <span className="todo-cat-count">{grouped["Other"].length}</span>
+                  </div>
+                  <div className="todo-list">
+                    {grouped["Other"].map(t=>(
+                      <TodoItem key={t.id} t={t}/>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              )}
+            </div>
+          ) : (
+            /* Flat list for "all" view */
+            <div className="todo-list">
+              {filtered.map(t=>(
+                <TodoItem key={t.id} t={t} showCategory={true}/>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Add/Edit Dialog */}
-      {isDialogOpen && (
-        <div className="modal-overlay" onClick={() => setIsDialogOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      {/* ── Completion toast ── */}
+      {completedMsg && (
+        <div className="todo-toast">
+          <CheckCircle size={16} style={{color:"#10b981"}}/>
+          <span><strong>{completedMsg}</strong> — nice work!</span>
+          <Sparkles size={14} style={{color:"#f59e0b"}}/>
+        </div>
+      )}
+
+      {/* ── Add/Edit Modal ── */}
+      {isModalOpen && (
+        <div className="modal-overlay" onClick={closeModal}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{editingTodo ? "Edit Task" : "New Task"}</h2>
-              <button className="close-btn" onClick={() => setIsDialogOpen(false)}>
-                ✕
-              </button>
+              <h2>{editingTodo?"Edit Task":"New Task"}</h2>
+              <button className="btn-icon" onClick={closeModal}><X size={16}/></button>
             </div>
-
-            <form onSubmit={handleSubmit} className="todo-form">
-              <div className="form-group">
-                <label>Title *</label>
-                <input
-                  type="text"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  placeholder="What needs to be done?"
-                  required
-                  className="form-input"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Description</label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
-                  placeholder="Add details..."
-                  rows={4}
-                  className="form-textarea"
-                />
-              </div>
-
-              <div className="form-row">
+            <form onSubmit={handleSubmit}>
+              <div className="modal-body todo-form">
                 <div className="form-group">
-                  <label>Priority</label>
-                  <select
-                    value={formData.priority}
-                    onChange={(e) =>
-                      setFormData({ ...formData, priority: e.target.value })
-                    }
-                    className="form-select"
-                  >
-                    {PRIORITIES.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
+                  <label>Title *</label>
+                  <input className="form-control" placeholder="What needs to be done?"
+                    value={form.title}
+                    onChange={e=>setForm(f=>({...f,title:e.target.value}))}
+                    required autoFocus/>
                 </div>
-
                 <div className="form-group">
-                  <label>Category</label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) =>
-                      setFormData({ ...formData, category: e.target.value })
-                    }
-                    className="form-select"
-                  >
-                    {CATEGORIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
+                  <label>Description</label>
+                  <textarea className="form-control" rows={3}
+                    placeholder="Add more details…"
+                    value={form.description}
+                    onChange={e=>setForm(f=>({...f,description:e.target.value}))}/>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Priority</label>
+                    <select className="form-control" value={form.priority}
+                      onChange={e=>setForm(f=>({...f,priority:e.target.value}))}
+                      style={{color:PRIORITY_META[form.priority]?.color}}>
+                      {PRIORITIES.map(p=><option key={p}>{p}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Category</label>
+                    <select className="form-control" value={form.category}
+                      onChange={e=>setForm(f=>({...f,category:e.target.value}))}>
+                      {CATEGORIES.map(c=><option key={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Due Date</label>
+                  <input type="datetime-local" className="form-control"
+                    value={form.due_date}
+                    onChange={e=>setForm(f=>({...f,due_date:e.target.value}))}/>
                 </div>
               </div>
-
-              <div className="form-group">
-                <label>Due Date</label>
-                <input
-                  type="datetime-local"
-                  value={formData.due_date}
-                  onChange={(e) =>
-                    setFormData({ ...formData, due_date: e.target.value })
-                  }
-                  className="form-input"
-                />
-              </div>
-
-              <div className="form-actions">
-                <button
-                  type="button"
-                  onClick={() => setIsDialogOpen(false)}
-                  className="cancel-btn"
-                >
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={closeModal}>
                   Cancel
                 </button>
-                <button type="submit" className="submit-btn">
-                  {editingTodo ? "Update Task" : "Create Task"}
+                <button type="submit" className="btn btn-primary" disabled={saving}>
+                  {saving?"Saving…":editingTodo?"Update Task":"Add Task"}
                 </button>
               </div>
             </form>
@@ -516,38 +447,25 @@ export default function ToDoList() {
         </div>
       )}
 
-      {/* Delete Confirmation Dialog */}
-      {showDeleteDialog && (
-        <div className="modal-overlay" onClick={() => setShowDeleteDialog(false)}>
-          <div className="delete-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="delete-icon">⚠</div>
-            <h3>Delete Task?</h3>
-            <p>Are you sure you want to delete "{todoToDelete?.title}"?</p>
-            <p className="warning-text">This action cannot be undone.</p>
-            <div className="dialog-actions">
-              <button onClick={() => setShowDeleteDialog(false)} className="cancel-btn">
-                Cancel
-              </button>
-              <button onClick={handleDelete} className="confirm-delete-btn">
-                Delete
-              </button>
+      {/* ── Delete confirm ── */}
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={()=>setDeleteTarget(null)}>
+          <div className="modal delete-modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-body" style={{textAlign:"center",padding:"2rem 1.5rem"}}>
+              <div className="delete-modal-icon">🗑️</div>
+              <h3 style={{color:"var(--text-primary)",marginBottom:"0.5rem"}}>Delete Task?</h3>
+              <p style={{color:"var(--text-muted)",fontSize:"0.875rem"}}>
+                <strong style={{color:"var(--text-secondary)"}}>{deleteTarget.title}</strong>
+                <br/>This cannot be undone.
+              </p>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Completion Notification */}
-      {showCompleteNotif && (
-        <div className="complete-notification">
-          <div className="notif-icon">✓</div>
-          <div className="notif-content">
-            <div className="notif-title">Task Completed!</div>
-            <div className="notif-message">{completedTodoTitle}</div>
+            <div className="modal-footer" style={{justifyContent:"center"}}>
+              <button className="btn btn-secondary" onClick={()=>setDeleteTarget(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={handleDelete}>Delete</button>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
-
-
 }

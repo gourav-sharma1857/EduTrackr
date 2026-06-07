@@ -1,521 +1,449 @@
 import React, { useState, useEffect } from "react";
-import { collection, query, where, onSnapshot, doc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, onSnapshot as docSnapshot } from "firebase/firestore";
 import { db, auth } from "../firebase.js";
 import { onAuthStateChanged } from "firebase/auth";
-import { Link } from "react-router-dom";
-import "../styles/HomePage.css";
-import { 
-  LayoutDashboard, BookOpen, FileText, Calendar, 
-  StickyNote, CheckSquare, Briefcase, GraduationCap, 
-  Trophy, Calculator, User , LogOut
+import { Link, useNavigate } from "react-router-dom";
+import {
+  BookOpen, FileText, Calendar, StickyNote,
+  CheckSquare, Briefcase, GraduationCap, Trophy,
+  Calculator, TrendingUp, Clock, AlertCircle, ChevronRight
 } from 'lucide-react';
+import "../styles/HomePage.css";
+import "../styles/globals.css";
+
 
 export default function HomePage() {
-  const [user , setUser] = useState(null);
-  const [userProfile , setUserProfile] = useState(null);
-  const [classes, setClasses] = useState([]);
-  const [semesters, setSemesters] = useState([]);
+  const navigate = useNavigate();
+  const [user, setUser]               = useState(null);
+  const [profile, setProfile]         = useState(null);
+  const [classes, setClasses]         = useState([]);
   const [assignments, setAssignments] = useState([]);
-  const [todos, setTodos] = useState([]);
+  const [todos, setTodos]             = useState([]);
   const [applications, setApplications] = useState([]);
-  const [notes, setNotes] = useState([]);
-  const [coreReqs, setCoreReqs] = useState([]);
-  const [majorReqs, setMajorReqs] = useState([]);
-  const [minorReqs, setMinorReqs] = useState([]);
+  const [notes, setNotes]             = useState([]);
   const [gradedAssignments, setGradedAssignments] = useState([]);
+  const [semesters, setSemesters]     = useState([]);
+  const [coreReqs, setCoreReqs]       = useState([]);
+  const [majorReqs, setMajorReqs]     = useState([]);
 
+  /* ── Auth ── */
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (currentUser) => setUser(currentUser));
+    const unsub = onAuthStateChanged(auth, (u) => setUser(u));
     return () => unsub();
   }, []);
 
+  /* ── All real-time listeners ── */
   useEffect(() => {
     if (!user) return;
-    const unsub = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
-      if (docSnap.exists()) setUserProfile(docSnap.data());
-    });
-    return () => unsub();
+    const uid = user.uid;
+    const subs = [];
+
+    subs.push(onSnapshot(doc(db, "users", uid), (s) => { if (s.exists()) setProfile(s.data()); }));
+
+    const qs = (col, ...constraints) =>
+      query(collection(db, col), where("uid", "==", uid), ...constraints);
+
+    subs.push(onSnapshot(qs("classes", where("is_active","==",true)), (s) =>
+      setClasses(s.docs.map(d => ({ id: d.id, ...d.data() })))));
+
+    subs.push(onSnapshot(qs("assignments", where("is_completed","==",false)), (s) =>
+      setAssignments(s.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a,b) => new Date(a.due_date) - new Date(b.due_date)))));
+
+    subs.push(onSnapshot(qs("assignments", where("is_completed","==",true), where("is_graded","==",true)), (s) =>
+      setGradedAssignments(s.docs.map(d => ({ id: d.id, ...d.data() })))));
+
+    subs.push(onSnapshot(qs("todos", where("is_completed","==",false)), (s) =>
+      setTodos(s.docs.map(d => ({ id: d.id, ...d.data() })))));
+
+    subs.push(onSnapshot(qs("applications"), (s) =>
+      setApplications(s.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a,b) => new Date(b.applied_date||0) - new Date(a.applied_date||0)))));
+
+    subs.push(onSnapshot(qs("notes"), (s) =>
+      setNotes(s.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a,b) => new Date(b.created_at||0) - new Date(a.created_at||0)))));
+
+    subs.push(onSnapshot(query(collection(db,"degreeSemesters"), where("uid","==",uid)), (s) =>
+      setSemesters(s.docs.map(d => ({ id: d.id, ...d.data() })))));
+
+    subs.push(onSnapshot(query(collection(db,"coreRequirements"), where("uid","==",uid)), (s) =>
+      setCoreReqs(s.docs.map(d => ({ id: d.id, ...d.data() })))));
+
+    subs.push(onSnapshot(query(collection(db,"majorRequirements"), where("uid","==",uid)), (s) =>
+      setMajorReqs(s.docs.map(d => ({ id: d.id, ...d.data() })))));
+
+    return () => subs.forEach(u => u());
   }, [user]);
 
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, "classes"), where("uid", "==", user.uid), where("is_active", "==", true));
-    const unsub = onSnapshot(q, (snapshot) => {
-      setClasses(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-    });
-    return () => unsub();
-  }, [user]);
+  /* ── Helpers ── */
+  const now = new Date();
+  const todayStr = now.toDateString();
+  const todayDay = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][now.getDay()];
+  const todayClasses = classes
+    .filter(c => c.days?.includes(todayDay))
+    .sort((a,b) => (a.start_time||"").localeCompare(b.start_time||""));
 
-  useEffect(() => {
-  if (!user) return;
-  const q = query(collection(db, "degreeSemesters"), where("uid", "==", user.uid));
-  const unsub = onSnapshot(q, (snapshot) => {
-    setSemesters(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-  });
-  return () => unsub();
-}, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, "assignments"), where("uid", "==", user.uid), where("is_completed", "==", false));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      setAssignments(data.sort((a, b) => new Date(a.due_date) - new Date(b.due_date)));
-    });
-    return () => unsub();
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, "todos"), where("uid", "==", user.uid), where("is_completed", "==", false));
-    const unsub = onSnapshot(q, (snapshot) => {
-      setTodos(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-    });
-    return () => unsub();
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, "applications"), where("uid", "==", user.uid));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      setApplications(data.sort((a, b) => new Date(b.applied_date || 0) - new Date(a.applied_date || 0)));
-    });
-    return () => unsub();
-  }, [user]);
-
-  useEffect(() => {
-  if (!user) return;
-  const q = query(collection(db, "notes"), where("uid", "==", user.uid));
-  const unsub = onSnapshot(q, (snapshot) => {
-    const data = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-
-    setNotes(data.sort((a, b) => {
-      const dateA = a.created_at ? new Date(a.created_at) : new Date(0);
-      const dateB = b.created_at ? new Date(b.created_at) : new Date(0);
-      return dateB - dateA;
-    }));
-  });
-  return () => unsub();
-}, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    
-    const q1 = query(collection(db, "coreRequirements"), where("uid", "==", user.uid));
-    const unsub1 = onSnapshot(q1, (snapshot) => {
-      setCoreReqs(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-    });
-    
-    const q2 = query(collection(db, "majorRequirements"), where("uid", "==", user.uid));
-    const unsub2 = onSnapshot(q2, (snapshot) => {
-      setMajorReqs(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-    });
-    
-    const q3 = query(collection(db, "minorRequirements"), where("uid", "==", user.uid));
-    const unsub3 = onSnapshot(q3, (snapshot) => {
-      setMinorReqs(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-    });
-    
-    return () => { unsub1(); unsub2(); unsub3(); };
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    const q = query(
-      collection(db, "assignments"),
-      where("uid", "==", user.uid),
-      where("is_completed", "==", true),
-      where("is_graded", "==", true)
-    );
-    const unsub = onSnapshot(q, (snapshot) => {
-      setGradedAssignments(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-    });
-    return () => unsub();
-  }, [user]);
-
-  const getTodayDay = () => {
-    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    return days[new Date().getDay()];
-  };
-
-  const todayClasses = classes.filter(cls => cls.days && cls.days.includes(getTodayDay()));
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "";
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffDays = Math.ceil((date - now) / (1000 * 60 * 60 * 24));
-    if (diffDays < 0) return "Overdue";
-    if (diffDays === 0) return "Today";
-    if (diffDays === 1) return "Tomorrow";
-    if (diffDays <= 7) return `${diffDays} days`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "Interview": return { bg: "rgba(59, 130, 246, 0.2)", text: "#60a5fa" };
-      case "Offer": return { bg: "rgba(16, 185, 129, 0.2)", text: "#34d399" };
-      case "Rejected": return { bg: "rgba(239, 68, 68, 0.2)", text: "#f87171" };
-      case "Accepted": return { bg: "rgba(34, 197, 94, 0.2)", text: "#4ade80" };
-      default: return { bg: "rgba(100, 116, 139, 0.2)", text: "#94a3b8" };
-    }
-  };
-
-
-  const calculateDegreeProgress = () => {
-  if (!userProfile) return { totalCompleted: 0, totalRequired: 120, percentage: 0 };
-
-  const totalRequired = Number(userProfile.degree_credit_requirement) || 120;
-  const completedCourses = new Map(); // Use Map to prevent double counting
-
-  [...coreReqs, ...majorReqs, ...minorReqs].forEach(c => {
-    if (c.is_completed === true || c.status === "Completed" || c.status === "Transferred") {
-      completedCourses.set(c.course_code, Number(c.credit_hours) || 0);
-    }
+  const dueToday  = assignments.filter(a => a.due_date && new Date(a.due_date).toDateString() === todayStr);
+  const overdue   = assignments.filter(a => a.due_date && new Date(a.due_date) < now);
+  const dueSoon   = assignments.filter(a => {
+    if (!a.due_date) return false;
+    const d = new Date(a.due_date);
+    const diff = (d - now) / 86400000;
+    return diff >= 0 && diff <= 7;
   });
 
-  semesters.forEach(sem => {
-    (sem.courses || []).forEach(c => {
-      if (c.status === "Completed" || c.status === "Transferred") {
-        completedCourses.set(c.course_code, Number(c.credit_hours) || 0);
-      }
-    });
-  });
-
-  const courseCredits = Array.from(completedCourses.values()).reduce((a, b) => a + b, 0);
-  const transferredProfileHours = Number(userProfile.completed_credit_hours) || 0;
-
-  const totalCompleted = courseCredits + transferredProfileHours;
-  
-  return {
-    totalCompleted,
-    totalRequired,
-    percentage: totalRequired > 0 ? Math.min((totalCompleted / totalRequired) * 100, 100) : 0
-  };
-};
-const getGradePoints = (percentage) => {
-    if (percentage >= 93) return 4.0;
-    if (percentage >= 90) return 3.67;
-    if (percentage >= 87) return 3.33;
-    if (percentage >= 83) return 3.0;
-    if (percentage >= 80) return 2.67;
-    if (percentage >= 77) return 2.33;
-    if (percentage >= 73) return 2.0;
-    if (percentage >= 70) return 1.67;
-    if (percentage >= 67) return 1.33;
-    if (percentage >= 63) return 1.0;
-    if (percentage >= 60) return 0.67;
-    return 0.0;
+  const formatDue = (ds) => {
+    if (!ds) return "";
+    const d = new Date(ds);
+    const diff = Math.ceil((d - now) / 86400000);
+    if (diff < 0)  return "Overdue";
+    if (diff === 0) return "Today";
+    if (diff === 1) return "Tomorrow";
+    if (diff <= 7)  return `${diff}d`;
+    return d.toLocaleDateString("en-US", { month:"short", day:"numeric" });
   };
 
-    const calculateGPA = () => {
-    const priorGpa = Number(userProfile?.current_gpa) || 0;
-    const priorCredits = Number(userProfile?.completed_credit_hours) || 0;
+  const dueClass = (ds) => {
+    const t = formatDue(ds);
+    if (t === "Overdue") return "due-overdue";
+    if (t === "Today")   return "due-today";
+    if (t === "Tomorrow") return "due-tomorrow";
+    return "";
+  };
 
-    let currentPoints = 0;
-    let currentCredits = 0;
-
+  /* ── GPA calc ── */
+  const calcGpa = () => {
+    const prior    = Number(profile?.current_gpa || 0);
+    const priorCr  = Number(profile?.completed_credit_hours || 0);
+    const getGpts  = (p) => {
+      if (p>=93) return 4.0; if (p>=90) return 3.67; if (p>=87) return 3.33;
+      if (p>=83) return 3.0; if (p>=80) return 2.67; if (p>=77) return 2.33;
+      if (p>=73) return 2.0; if (p>=70) return 1.67; if (p>=67) return 1.33;
+      if (p>=63) return 1.0; if (p>=60) return 0.67; return 0;
+    };
+    let pts=0, cr=0;
     classes.forEach(cls => {
-      const classAssignments = gradedAssignments.filter(a => a.class_id === cls.id);
-      if (classAssignments.length > 0 && cls.credit_hours) {
-        const totalPts = classAssignments.reduce((sum, a) => sum + (a.total_points || 0), 0);
-        const earnedPts = classAssignments.reduce((sum, a) => sum + (a.earned_points || 0), 0);
-        
-        if (totalPts > 0) {
-          const percentage = (earnedPts / totalPts) * 100;
-          const gpaValue = getGradePoints(percentage);
-          currentPoints += gpaValue * Number(cls.credit_hours);
-          currentCredits += Number(cls.credit_hours);
-        }
+      const asgn = gradedAssignments.filter(a => a.class_id === cls.id);
+      if (!asgn.length || !cls.credit_hours) return;
+      const total  = asgn.reduce((s,a) => s+(a.total_points||0), 0);
+      const earned = asgn.reduce((s,a) => s+(a.earned_points||0), 0);
+      if (total > 0) {
+        pts += getGpts((earned/total)*100) * cls.credit_hours;
+        cr  += cls.credit_hours;
       }
     });
-
-    const totalPoints = (priorGpa * priorCredits) + currentPoints;
-    const totalCredits = priorCredits + currentCredits;
-
-    if (totalCredits === 0) return { gpa: priorGpa > 0 ? priorGpa.toFixed(2) : 0, hasData: priorGpa > 0 };
-    
-    const finalGpa = totalPoints / totalCredits;
-    return { gpa: finalGpa.toFixed(2), hasData: true };
+    const totalPts = prior * priorCr + pts;
+    const totalCr  = priorCr + cr;
+    return totalCr > 0 ? (totalPts/totalCr).toFixed(2) : prior ? prior.toFixed(2) : null;
   };
 
-  const degreeProgress = calculateDegreeProgress();
-  const gpaData = calculateGPA();
+  const gpa = calcGpa();
 
-  const timeToMinutes = (time) => {
-  const [hours, minutes] = time.split(":").map(Number);
-  return hours * 60 + minutes;
-};
-
-const sortedTodayClasses = todayClasses
-  .slice()
-  .sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time));
-
-
-
-  const getUserName = () => {
-    if (userProfile?.full_name) return userProfile.full_name.split(' ')[0];
-    if (user?.displayName) return user.displayName.split(' ')[0];
-    return 'Student';
+  /* ── Degree progress ── */
+  const calcDegree = () => {
+    const req = Number(profile?.degree_credit_requirement || 120);
+    const done = new Map();
+    [...coreReqs, ...majorReqs].forEach(c => {
+      if (c.status==="Completed"||c.status==="Transferred"||c.is_completed)
+        done.set(c.course_code, Number(c.credit_hours)||0);
+    });
+    semesters.forEach(s => (s.courses||[]).forEach(c => {
+      if (c.status==="Completed"||c.status==="Transferred")
+        done.set(c.course_code, Number(c.credit_hours)||0);
+    }));
+    const credits = Array.from(done.values()).reduce((a,b)=>a+b,0)
+      + Number(profile?.completed_credit_hours||0);
+    return { credits: Math.min(credits, req), req, pct: Math.min((credits/req)*100,100) };
   };
 
-  if (!user) {
-    return <div className="empty-state">Please sign in to view dashboard</div>;
-  }
+  const degree = calcDegree();
+
+  const statusColor = (s) => {
+    const m = { Interview:"#3b82f6", Offer:"#10b981", Rejected:"#ef4444", Accepted:"#22c55e" };
+    return m[s] || "#64748b";
+  };
+
+  const gpaColor = (g) => {
+    if (!g) return "var(--text-muted)";
+    const n = Number(g);
+    if (n >= 3.7) return "#10b981"; if (n >= 3.0) return "#3b82f6";
+    if (n >= 2.5) return "#f59e0b"; return "#ef4444";
+  };
+
+  if (!user) return (
+    <div className="hp-signin">
+      <div className="hp-signin-content">
+        <span>🎓</span>
+        <h2>Sign in to view your dashboard</h2>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="dashboard-container">
-      <div className="dashboard-header">
-        <h1>Welcome back, {getUserName()}! 👋</h1>
-        <p>Here's what's happening today, {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
-      </div>
-
-      {/* Top 3 Stat Cards */}
-      <div className="top-stats">
-        <Link to="/GPACalculator" className="stat-card gpa">
-          <div ><Calculator size={40} /></div>
-          <div className="stat-info">
-            <span className="stat-value" style={{ color: gpaData.gpa >= 3.5 ? '#10b981' : gpaData.gpa >= 3.0 ? '#3b82f6' : '#f59e0b' }}>
-              {gpaData.hasData ? gpaData.gpa : 'N/A'}
+    <div className="homepage">
+      {/* ── Hero ── */}
+      <div className="hp-hero stagger-1">
+        <div className="hp-hero-text">
+          <h1>
+            {new Date().getHours() < 12 ? "Good morning" :
+             new Date().getHours() < 17 ? "Good afternoon" : "Good evening"},
+            <span className="hp-hero-name"> {profile?.display_name?.split(" ")[0] || "Student"}</span>
+          </h1>
+          <p className="hp-hero-sub">
+            {todayClasses.length > 0
+              ? `You have ${todayClasses.length} class${todayClasses.length>1?"es":""} today`
+              : "No classes today"
+            }
+            {dueToday.length > 0 && ` · ${dueToday.length} assignment${dueToday.length>1?"s":""} due`}
+          </p>
+        </div>
+        {(overdue.length > 0 || dueToday.length > 0) && (
+          <div className="hp-alert" onClick={() => navigate("/assignments")}>
+            <AlertCircle size={15} />
+            <span>
+              {overdue.length > 0
+                ? `${overdue.length} overdue assignment${overdue.length>1?"s":""}`
+                : `${dueToday.length} due today`}
             </span>
-            <span className="stat-label">Current GPA</span>
+            <ChevronRight size={14} />
+          </div>
+        )}
+      </div>
+
+      {/* ── Stat Row ── */}
+      <div className="hp-stats stagger-2">
+        <Link to="/gpacalculator" className="hp-stat">
+          <div className="hp-stat-icon" style={{ background:"rgba(6,182,212,0.12)", color:"#22d3ee" }}>
+            <Calculator size={22} />
+          </div>
+          <div className="hp-stat-body">
+            <span className="hp-stat-val" style={{ color: gpaColor(gpa) }}>
+              {gpa || "—"}
+            </span>
+            <span className="hp-stat-label">GPA</span>
           </div>
         </Link>
 
-        <Link to="/degree-planner" className="stat-card degree">
-          <div className="stat-icon-bg"><GraduationCap size={40}/></div>
-          <div className="stat-info">
-            <span className="stat-value">{degreeProgress.percentage.toFixed(0)}%</span>
-            <span className="stat-label">{degreeProgress.totalCompleted} / {degreeProgress.totalRequired} credits</span>
+        <Link to="/degree-planner" className="hp-stat">
+          <div className="hp-stat-icon" style={{ background:"rgba(236,72,153,0.12)", color:"#f472b6" }}>
+            <GraduationCap size={22} />
           </div>
-          <div className="stat-progress-bar">
-            <div className="stat-progress-fill" style={{ width: `${degreeProgress.percentage}%` }}></div>
+          <div className="hp-stat-body">
+            <span className="hp-stat-val">{degree.pct.toFixed(0)}%</span>
+            <span className="hp-stat-label">{degree.credits}/{degree.req} cr</span>
+          </div>
+          <div className="hp-stat-progress">
+            <div className="hp-stat-bar" style={{ width:`${degree.pct}%`, background:"#ec4899" }} />
           </div>
         </Link>
 
-        <Link to="/gradetracker" className="stat-card grades">
-          <div className="stat-icon-bg"> <Trophy size={40} /></div>
-          <div className="stat-info">
-            <span className="stat-value">{gradedAssignments.length}</span>
-            <span className="stat-label">Graded Assignments</span>
+        <Link to="/assignments" className="hp-stat">
+          <div className="hp-stat-icon" style={{ background:"rgba(99,102,241,0.12)", color:"#818cf8" }}>
+            <FileText size={22} />
+          </div>
+          <div className="hp-stat-body">
+            <span className="hp-stat-val">{assignments.length}</span>
+            <span className="hp-stat-label">Pending</span>
+          </div>
+          {overdue.length > 0 && (
+            <span className="hp-stat-badge">{overdue.length} late</span>
+          )}
+        </Link>
+
+        <Link to="/gradetracker" className="hp-stat">
+          <div className="hp-stat-icon" style={{ background:"rgba(234,179,8,0.12)", color:"#facc15" }}>
+            <Trophy size={22} />
+          </div>
+          <div className="hp-stat-body">
+            <span className="hp-stat-val">{gradedAssignments.length}</span>
+            <span className="hp-stat-label">Graded</span>
           </div>
         </Link>
       </div>
 
-      {/* Main Preview Grid */}
-      <div className="preview-grid">
-        
+      {/* ── Main Grid ── */}
+      <div className="hp-grid stagger-3">
+
         {/* Today's Schedule */}
-        <Link to="/classes" className="preview-card large">
-          <div className="preview-header">
-            <div className="preview-title-row">
-              <span className="preview-icon"><BookOpen size={20} /></span>
-              <h3>Today's Schedule</h3>
+        <div className="hp-card ">
+          <div className="hp-card-header">
+            <div className="hp-card-title">
+              <BookOpen size={16} />
+              <span>Today's Schedule</span>
             </div>
-            <span className="preview-badge blue">{todayClasses.length} classes</span>
+            <Link to="/classes" className="hp-card-link">View all <ChevronRight size={14}/></Link>
           </div>
-          <div className="preview-content">
-            {todayClasses.length > 0 ? (
-              <div className="schedule-list">
-               {sortedTodayClasses.slice(0, 3).map(cls => (
-                <div key={cls.id} className="schedule-item">
-                  <div
-                    className="schedule-color"
-                    style={{ backgroundColor: cls.color || '#3b82f6' }}
-                  ></div>
-
-                  <div className="schedule-info">
-                    <span className="schedule-code">{cls.course_code}</span>
-                    <span className="schedule-name">{cls.course_name}</span>
+          {todayClasses.length > 0 ? (
+            <div className="hp-schedule">
+              {todayClasses.map(cls => (
+                <div key={cls.id} className="hp-schedule-item" onClick={() => navigate("/classes")}>
+                  <div className="hp-schedule-bar" style={{ background: cls.color || "#3b82f6" }} />
+                  <div className="hp-schedule-info">
+                    <span className="hp-schedule-code" style={{ color: cls.color }}>{cls.course_code}</span>
+                    <span className="hp-schedule-name">{cls.course_name}</span>
                   </div>
-
-                  <div className="schedule-time">
-                    <span>{cls.start_time}</span>
-                    <span className="schedule-room">{cls.room_number}</span>
+                  <div className="hp-schedule-time">
+                    <Clock size={12} />
+                    <span>{cls.start_time} – {cls.end_time}</span>
                   </div>
                 </div>
               ))}
-
-              </div>
-            ) : (
-              <div className="preview-empty-state">
-                <span>🎉</span>
-                <p>No classes today!</p>
-              </div>
-            )}
-          </div>
-        </Link>
+            </div>
+          ) : (
+            <div className="hp-empty-inline">🎉 No classes today — enjoy your day!</div>
+          )}
+        </div>
 
         {/* Assignments */}
-        <Link to="/assignments" className="preview-card">
-          <div className="preview-header">
-            <div className="preview-title-row">
-              <span className="preview-icon"><FileText size={20} /> </span>
-              <h3>Assignments</h3>
+        <div className="hp-card">
+          <div className="hp-card-header">
+            <div className="hp-card-title">
+              <FileText size={16} />
+              <span>Assignments</span>
             </div>
-            <span className="preview-badge purple">{assignments.length} due</span>
+            <Link to="/assignments" className="hp-card-link">See all <ChevronRight size={14}/></Link>
           </div>
-          <div className="preview-content">
-            {assignments.length > 0 ? (
-              <div className="preview-list">
-                {assignments.slice(0, 3).map(a => {
-                  const cls = classes.find(c => c.id === a.class_id);
-                  const dueText = formatDate(a.due_date);
-                  return (
-                    <div key={a.id} className="preview-item">
-                      <div className="preview-item-color" style={{ backgroundColor: cls?.color || '#8b5cf6' }}></div>
-                      <div className="preview-item-info">
-                        <span className="preview-item-title">{a.title}</span>
-                        <span className="preview-item-sub">{cls?.course_code}</span>
-                      </div>
-                      <span className={`preview-due ${dueText === 'Overdue' ? 'overdue' : dueText === 'Today' ? 'today' : ''}`}>
-                        {dueText}
-                      </span>
+          {dueSoon.length > 0 ? (
+            <div className="hp-list">
+              {dueSoon.slice(0,5).map(a => {
+                const cls = classes.find(c => c.id === a.class_id);
+                return (
+                  <div key={a.id} className="hp-list-item" onClick={() => navigate("/assignments")}>
+                    <div className="hp-list-dot" style={{ background: cls?.color || "#6366f1" }} />
+                    <div className="hp-list-info">
+                      <span className="hp-list-title">{a.title}</span>
+                      <span className="hp-list-sub">{cls?.course_code || "—"}</span>
                     </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="preview-empty-state small">
-                <p>All caught up! ✨</p>
-              </div>
-            )}
-          </div>
-        </Link>
+                    <span className={`hp-due ${dueClass(a.due_date)}`}>{formatDue(a.due_date)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="hp-empty-inline">✨ All caught up!</div>
+          )}
+        </div>
 
         {/* To-Do */}
-        <Link to="/todo" className="preview-card">
-          <div className="preview-header">
-            <div className="preview-title-row">
-              <span className="preview-icon"><CheckSquare size={20} /></span>
-              <h3>To-Do</h3>
+        <div className="hp-card">
+          <div className="hp-card-header">
+            <div className="hp-card-title">
+              <CheckSquare size={16} />
+              <span>To-Do</span>
             </div>
-            <span className="preview-badge green">{todos.length} tasks</span>
+            <Link to="/todo" className="hp-card-link">See all <ChevronRight size={14}/></Link>
           </div>
-          <div className="preview-content">
-            {todos.length > 0 ? (
-              <div className="preview-list">
-                {todos.slice(0, 3).map(todo => (
-                  <div key={todo.id} className="preview-item">
-                    <div className={`todo-check ${todo.priority?.toLowerCase()}`}></div>
-                    <div className="preview-item-info">
-                      <span className="preview-item-title">{todo.title}</span>
-                    </div>
-                    <span className={`preview-priority ${todo.priority?.toLowerCase()}`}>{todo.priority}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="preview-empty-state small">
-                <p>No tasks pending</p>
-              </div>
-            )}
-          </div>
-        </Link>
+          {todos.length > 0 ? (
+            <div className="hp-list">
+              {todos.slice(0,4).map(t => (
+                <div key={t.id} className="hp-list-item" onClick={() => navigate("/todo")}>
+                  <div className={`hp-todo-check hp-priority-${t.priority?.toLowerCase()}`} />
+                  <span className="hp-list-title">{t.title}</span>
+                  <span className={`hp-priority-tag hp-priority-${t.priority?.toLowerCase()}`}>
+                    {t.priority}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="hp-empty-inline">No tasks pending</div>
+          )}
+        </div>
 
         {/* Career */}
-        <Link to="/career" className="preview-card">
-          <div className="preview-header">
-            <div className="preview-title-row">
-              <span className="preview-icon"><Briefcase size={20} /></span>
-              <h3>Career</h3>
+        <div className="hp-card">
+          <div className="hp-card-header">
+            <div className="hp-card-title">
+              <Briefcase size={16} />
+              <span>Career</span>
             </div>
-            <span className="preview-badge orange">{applications.length} apps</span>
+            <Link to="/career" className="hp-card-link">See all <ChevronRight size={14}/></Link>
           </div>
-          <div className="preview-content">
-            {applications.length > 0 ? (
-              <div className="preview-list">
-                {applications.slice(0, 3).map(app => {
-                  const statusColor = getStatusColor(app.status);
-                  return (
-                    <div key={app.id} className="preview-item">
-                      <div className="preview-item-info">
-                        <span className="preview-item-title">{app.position}</span>
-                        <span className="preview-item-sub">{app.company_organization}</span>
-                      </div>
-                      <span className="preview-status" style={{ backgroundColor: statusColor.bg, color: statusColor.text }}>
-                        {app.status}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="preview-empty-state small">
-                <p>No applications yet</p>
-              </div>
-            )}
-          </div>
-        </Link>
+          {applications.length > 0 ? (
+            <div className="hp-list">
+              {applications.slice(0,4).map(app => (
+                <div key={app.id} className="hp-list-item" onClick={() => navigate("/career")}>
+                  <div className="hp-list-info">
+                    <span className="hp-list-title">{app.position}</span>
+                    <span className="hp-list-sub">{app.company_organization}</span>
+                  </div>
+                  <span className="hp-status-pill" style={{
+                    background: statusColor(app.status) + "22",
+                    color: statusColor(app.status)
+                  }}>{app.status}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="hp-empty-inline">No applications yet</div>
+          )}
+        </div>
 
         {/* Notes */}
-        <Link to="/notes" className="preview-card">
-          <div className="preview-header">
-            <div className="preview-title-row">
-              <span className="preview-icon"><StickyNote size={20} /></span>
-              <h3>Notes</h3>
+        <div className="hp-card">
+          <div className="hp-card-header">
+            <div className="hp-card-title">
+              <StickyNote size={16} />
+              <span>Recent Notes</span>
             </div>
-            <span className="preview-badge">{notes.length} notes</span>
+            <Link to="/notes" className="hp-card-link">See all <ChevronRight size={14}/></Link>
           </div>
-          <div className="preview-content">
-            {notes.length > 0 ? (
-              <div className="preview-list">
-                {notes.slice(0, 3).map(note => {
-                  const cls = classes.find(c => c.id === note.class_id);
-                  return (
-                    <div key={note.id} className="preview-item">
-                      <div className="preview-item-color" style={{ backgroundColor: cls?.color || '#64748b' }}></div>
-                      <div className="preview-item-info">
-                        <span className="preview-item-title">{note.title}</span>
-                        <span className="preview-item-sub">{cls?.course_code || 'General'}</span>
-                      </div>
+          {notes.length > 0 ? (
+            <div className="hp-notes-grid">
+              {notes.slice(0,3).map(note => {
+                const cls = classes.find(c => c.id === note.class_id);
+                return (
+                  <div key={note.id} className="hp-note-chip" onClick={() => navigate("/notes")}>
+                    <div className="hp-note-chip-bar" style={{ background: cls?.color || "#a855f7" }} />
+                    <div className="hp-note-chip-body">
+                      <span className="hp-note-chip-title">{note.title}</span>
+                      <span className="hp-note-chip-sub">{cls?.course_code || "General"}</span>
                     </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="preview-empty-state small">
-                <p>No notes yet</p>
-              </div>
-            )}
-          </div>
-        </Link>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="hp-empty-inline">No notes yet</div>
+          )}
+        </div>
 
-        {/* Calendar */}
-        <Link to="/calendar" className="preview-card">
-          <div className="preview-header">
-            <div className="preview-title-row">
-              <span className="preview-icon"><Calendar size={20} /></span>
-              <h3>Calendar</h3>
+        {/* Calendar snapshot */}
+        <div className="hp-card hp-card-calendar" onClick={() => navigate("/calendar")}>
+          <div className="hp-card-header">
+            <div className="hp-card-title">
+              <Calendar size={16} />
+              <span>Calendar</span>
+            </div>
+            <ChevronRight size={14} style={{ color:"var(--text-muted)" }} />
+          </div>
+          <div className="hp-cal-snap">
+            <div className="hp-cal-date-big">
+              <span className="hp-cal-day-name">
+                {now.toLocaleDateString("en-US",{weekday:"long"})}
+              </span>
+              <span className="hp-cal-day-num">{now.getDate()}</span>
+              <span className="hp-cal-month">
+                {now.toLocaleDateString("en-US",{month:"long", year:"numeric"})}
+              </span>
+            </div>
+            <div className="hp-cal-stats">
+              <div className="hp-cal-stat">
+                <span className="hp-cal-num">{todayClasses.length}</span>
+                <span>Classes</span>
+              </div>
+              <div className="hp-cal-stat">
+                <span className="hp-cal-num">{dueToday.length}</span>
+                <span>Due Today</span>
+              </div>
+              <div className="hp-cal-stat">
+                <span className="hp-cal-num">{todos.length}</span>
+                <span>Tasks</span>
+              </div>
             </div>
           </div>
-          <div className="preview-content">
-            <div className="calendar-mini">
-              <div className="calendar-today">
-                <span className="calendar-weekday">{getTodayDay()}</span>
-                <span className="calendar-day-num">{new Date().getDate()}</span>
-                <span className="calendar-month">{new Date().toLocaleDateString('en-US', { month: 'short' })}</span>
-              </div>
-              <div className="calendar-right">
-                <div className="calendar-summary">
-                  <div className="calendar-stat">
-                    <span className="cal-num">{todayClasses.length}</span>
-                    <span className="cal-label">Classes</span>
-                  </div>
-                  <div className="calendar-stat">
-                    <span className="cal-num">{assignments.filter(a => formatDate(a.due_date) === 'Today').length}</span>
-                    <span className="cal-label">Due Today</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </Link>
+        </div>
 
       </div>
     </div>
