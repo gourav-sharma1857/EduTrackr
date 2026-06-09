@@ -194,13 +194,21 @@ export default function Topbar() {
             </div>
 
             <div className="tb-modal-footer">
-              <a href="mailto:your.email@example.com?subject=EduTrackr%20Feedback" className="tb-email-link">
+              <a href="https://mail.google.com/mail/u/0/?tab=rm&ogbl#inbox?compose=DmwnWstsCnlpCkRhSFVMdDWCJWVhlXcTVjFrQxfhXrvWpFSBqPfFlwwzffqjmldSkLlJZBWkvZRL" className="tb-email-link" target="_blank">
                 <Mail size={16} />
                 <span>Email Me</span>
               </a>
               <div className="tb-student-made">
-                Made with <Heart size={12} className="heart-icon" /> by a student
-              </div>
+                  Made with <Heart size={12} className="heart-icon" /> by{" "}
+                  <a 
+                    href="https://www.linkedin.com/in/gourav-sharma-3b2558281" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="linkedin-link"
+                  >
+                    Gourav Sharma
+                  </a>
+                </div>
             </div>
 
           </div>
