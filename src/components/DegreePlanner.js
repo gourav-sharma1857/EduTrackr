@@ -123,11 +123,24 @@ export default function DegreePlanner() {
     ));
 
     const loadExtras = async () => {
-      const snap = await getDoc(doc(db,"degreeSettings",uid));
-      if (snap.exists()) setDegreeSettings(prev=>({...prev,...snap.data()}));
-      const wSnap = await getDoc(doc(db,"categoryWeights",uid));
+      const [settSnap, profileSnap, wSnap, gSnap] = await Promise.all([
+        getDoc(doc(db,"degreeSettings",uid)),
+        getDoc(doc(db,"users",uid)),
+        getDoc(doc(db,"categoryWeights",uid)),
+        getDoc(doc(db,"gpaScale",uid)),
+      ]);
+      const profileData = profileSnap.exists() ? profileSnap.data() : {};
+      const settData    = settSnap.exists()    ? settSnap.data()    : {};
+      // Seed totalCredits from profile.degree_credit_requirement if not in degreeSettings
+      const totalCredits = settData.totalCredits
+        || profileData.degree_credit_requirement
+        || 120;
+      setDegreeSettings(prev => ({
+        ...prev,
+        ...settData,
+        totalCredits,
+      }));
       if (wSnap.exists()) setCategoryWeights(wSnap.data().weights||{});
-      const gSnap = await getDoc(doc(db,"gpaScale",uid));
       if (gSnap.exists()) setGlobalScale(gSnap.data().scale||null);
     };
     loadExtras();
@@ -147,9 +160,15 @@ export default function DegreePlanner() {
 
   /* Compute all stats via shared utility */
   const stats = useMemo(() => computeAllStats({
-    allClasses, semesters, coreReqs, majorReqs, minorReqs,
-    profile, gradedAssignments: gradedA,
-    categoryWeights, globalScale,
+    allClasses,
+    semesters,
+    coreReqs,
+    majorReqs,
+    minorReqs,
+    profile:           profile || {},
+    gradedAssignments: gradedA,
+    categoryWeights,
+    globalScale,
   }), [allClasses, semesters, coreReqs, majorReqs, minorReqs,
        profile, gradedA, categoryWeights, globalScale]);
 
@@ -210,6 +229,13 @@ export default function DegreePlanner() {
     const merged = {...degreeSettings,...updated};
     setDegreeSettings(merged);
     await setDoc(doc(db,"degreeSettings",user.uid), merged, {merge:true});
+    // Sync degree_credit_requirement to users doc so all pages see same value
+    if (updated.totalCredits !== undefined) {
+      await setDoc(doc(db,"users",user.uid),
+        { degree_credit_requirement: Number(updated.totalCredits) },
+        { merge: true }
+      );
+    }
   };
 
   /* ── Semester CRUD ── */
@@ -345,7 +371,7 @@ export default function DegreePlanner() {
         </div>
         <div className="dp-progress-bar-wrap">
           <div className="dp-progress-labels">
-            <span>{stats.totalCompletedForDegree}/{stats.degreeReq} credits</span>
+            <span>{stats.totalForDegree}/{stats.degreeReq} credits</span>
             <span className="dp-pct">{stats.degreeProgress.toFixed(1)}%</span>
           </div>
           <div className="dp-progress-track">
