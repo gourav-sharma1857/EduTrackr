@@ -265,39 +265,55 @@ export default function CalendarView() {
                   </div>
 
                   {/* Dot indicators (compact view) */}
-                  {events.length > 0 && (
-                    <div className="cal-cell-dots">
-                      {events.slice(0, maxDots).map((e,i) => (
-                        <span key={i}  style={{background:e.color}}/>
-                      ))}
-                    </div>
-                  )}
+                 
                 </div>
               );
             })}
           </div>
 
           {/* Legend */}
-          <div className="cal-legend">
-            <div className="cal-legend-item">
-              <span className="cal-dot" style={{background:"#6366f1"}}/>
-              <span>Assignments</span>
+<div className="cal-legend-wrap">
+  <div>
+    <div className="cal-legend-section-label">Event types</div>
+    <div className="cal-legend-chips">
+      {[
+        { color: "#6366f1", label: "Assignments" },
+        { color: "#10b981", label: "To-Do" },
+        { color: "#f59e0b", label: "Interviews" },
+      ].map(({ color, label }) => (
+        <div
+          key={label}
+          className="cal-legend-chip"
+          style={{ background: color + "18", borderColor: color + "44", color }}
+        >
+          <span className="cal-dot" style={{ background: color }} />
+          {label}
+        </div>
+      ))}
+    </div>
+  </div>
+
+  {classes.length > 0 && (
+    <div>
+      <div className="cal-legend-section-label">Your classes</div>
+      <div className="cal-legend-chips">
+        {classes.map(cls => {
+          const c = cls.color || "#3b82f6";
+          return (
+            <div
+              key={cls.id}
+              className="cal-legend-chip"
+              style={{ background: c + "18", borderColor: c + "44", color: c }}
+            >
+              <span className="cal-dot" style={{ background: c }} />
+              {cls.course_code || cls.name}
             </div>
-            <div className="cal-legend-item">
-              <span className="cal-dot" style={{background:"#10b981"}}/>
-              <span>To-Do</span>
-            </div>
-            <div className="cal-legend-item">
-              <span className="cal-dot" style={{background:"#f59e0b"}}/>
-              <span>Interviews</span>
-            </div>
-            {classes.slice(0,3).map(cls => (
-              <div key={cls.id} className="cal-legend-item">
-                <span className="cal-dot" style={{background:cls.color||"#3b82f6"}}/>
-                <span>{cls.course_code}</span>
-              </div>
-            ))}
-          </div>
+          );
+        })}
+      </div>
+    </div>
+  )}
+</div>
         </div>
 
         {/* ══════════ RIGHT: DETAIL PANEL ══════════ */}
