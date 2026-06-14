@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
-import { createPortal } from "react-dom"; // Essential for rendering over layout containers
+import { createPortal } from "react-dom";
 import { auth, db } from "../firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, onSnapshot, collection, query, where } from "firebase/firestore";
-import { Bell, Search, Mail, Heart, MessageSquare, X } from "lucide-react";
+import { Bell, Mail, Heart, MessageSquare, X } from "lucide-react";
 import "../styles/Topbar.css";
 
 export default function Topbar() {
@@ -12,8 +12,10 @@ export default function Topbar() {
   const [time, setTime] = useState(new Date());
   const [assignments, setAssignments] = useState([]);
   const [showNotifs, setShowNotifs] = useState(false);
-  const [showSupportModal, setShowSupportModal] = useState(false); 
-  const dropRef = useRef(null);
+  const [showSupportModal, setShowSupportModal] = useState(false);
+  const [panelPos, setPanelPos] = useState({ top: 0, right: 0 });
+  const bellRef = useRef(null);
+  const panelRef = useRef(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => setUser(u));
@@ -46,13 +48,30 @@ export default function Topbar() {
     return () => clearInterval(t);
   }, []);
 
+  // Close panel when clicking outside either the bell or the panel itself
   useEffect(() => {
     const handler = (e) => {
-      if (dropRef.current && !dropRef.current.contains(e.target)) setShowNotifs(false);
+      if (
+        bellRef.current && !bellRef.current.contains(e.target) &&
+        panelRef.current && !panelRef.current.contains(e.target)
+      ) {
+        setShowNotifs(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  const handleBellClick = () => {
+    if (!showNotifs && bellRef.current) {
+      const rect = bellRef.current.getBoundingClientRect();
+      setPanelPos({
+        top: rect.bottom + 8,                          // 8px below the button
+        right: window.innerWidth - rect.right,         // flush with right edge of button
+      });
+    }
+    setShowNotifs((v) => !v);
+  };
 
   const now = new Date();
   const overdue = assignments.filter((a) => a.due_date && new Date(a.due_date) < now);
@@ -77,7 +96,7 @@ export default function Topbar() {
 
   const getInitials = () => {
     const n = profile?.display_name || user?.displayName || "S";
-    return n.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
+    return n.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
   };
 
   return (
@@ -89,7 +108,6 @@ export default function Topbar() {
       </div>
 
       <div className="topbar-right">
-        {/* Support Trigger Button */}
         <button className="tb-support-btn" onClick={() => setShowSupportModal(true)}>
           <MessageSquare size={16} />
           <span>Support & Feedback</span>
@@ -97,120 +115,116 @@ export default function Topbar() {
 
         <div className="topbar-clock">
           <span className="clock-time">
-            {time.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true , second:"2-digit"})}
+            {time.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, second: "2-digit" })}
           </span>
           <span className="clock-date">
             {time.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
           </span>
         </div>
 
-        {/* Notifications */}
-        <div className="notif-wrap" ref={dropRef}>
+        {/* Bell button — ref'd so we can measure its position */}
+        <div className="notif-wrap">
           <button
+            ref={bellRef}
             className={`notif-btn ${urgentCount > 0 ? "urgent" : ""}`}
-            onClick={() => setShowNotifs((v) => !v)}
+            onClick={handleBellClick}
           >
             <Bell size={17} />
             {urgentCount > 0 && <span className="notif-dot">{urgentCount}</span>}
           </button>
-
-          {showNotifs && (
-            <div className="notif-panel">
-              <div className="notif-panel-header">
-                <span>Notifications</span>
-                {urgentCount > 0 && <span className="np-count">{urgentCount} urgent</span>}
-              </div>
-
-              {overdue.length > 0 && (
-                <div className="notif-group">
-                  <div className="notif-group-label overdue">⚠ Overdue</div>
-                  {overdue.slice(0, 4).map((a) => (
-                    <div key={a.id} className="notif-row overdue-row">
-                      <div className="notif-row-left">
-                        <span className="notif-row-dot" />
-                        <span className="notif-row-title">{a.title}</span>
-                      </div>
-                      <span className="notif-row-date">
-                        {new Date(a.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {todayDue.length > 0 && (
-                <div className="notif-group">
-                  <div className="notif-group-label today">📅 Due Today</div>
-                  {todayDue.slice(0, 4).map((a) => (
-                    <div key={a.id} className="notif-row today-row">
-                      <div className="notif-row-left">
-                        <span className="notif-row-dot" />
-                        <span className="notif-row-title">{a.title}</span>
-                      </div>
-                      <span className="notif-row-date">
-                        {new Date(a.due_date).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {urgentCount === 0 && (
-                <div className="notif-empty">✨ All caught up!</div>
-              )}
-            </div>
-          )}
         </div>
 
-        {/* Avatar */}
         <div className="topbar-avatar" title={getName()}>
           {getInitials()}
         </div>
       </div>
 
-      {/* Rendered via React Portal directly into document.body */}
+      {/* Notification panel — portal so it escapes any overflow:hidden parent */}
+      {showNotifs && createPortal(
+        <div
+          ref={panelRef}
+          className="notif-panel"
+          style={{ top: panelPos.top, right: panelPos.right }}
+        >
+          <div className="notif-panel-header">
+            <span>Notifications</span>
+            {urgentCount > 0 && <span className="np-count">{urgentCount} urgent</span>}
+          </div>
+
+          {overdue.length > 0 && (
+            <div className="notif-group">
+              <div className="notif-group-label overdue">⚠ Overdue</div>
+              {overdue.slice(0, 4).map((a) => (
+                <div key={a.id} className="notif-row overdue-row">
+                  <div className="notif-row-left">
+                    <span className="notif-row-dot" />
+                    <span className="notif-row-title">{a.title}</span>
+                  </div>
+                  <span className="notif-row-date">
+                    {new Date(a.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {todayDue.length > 0 && (
+            <div className="notif-group">
+              <div className="notif-group-label today">📅 Due Today</div>
+              {todayDue.slice(0, 4).map((a) => (
+                <div key={a.id} className="notif-row today-row">
+                  <div className="notif-row-left">
+                    <span className="notif-row-dot" />
+                    <span className="notif-row-title">{a.title}</span>
+                  </div>
+                  <span className="notif-row-date">
+                    {new Date(a.due_date).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {urgentCount === 0 && (
+            <div className="notif-empty">✨ All caught up!</div>
+          )}
+        </div>,
+        document.body
+      )}
+
+      {/* Support modal — unchanged */}
       {showSupportModal && createPortal(
         <div className="tb-modal-overlay" onClick={() => setShowSupportModal(false)}>
           <div className="tb-modal-card" onClick={(e) => e.stopPropagation()}>
-            
             <button className="tb-modal-close" onClick={() => setShowSupportModal(false)}>
               <X size={18} />
             </button>
-
             <div className="tb-modal-header">
               <div className="tb-modal-icon-badge">🎓</div>
               <h3>Student Built App 👋</h3>
             </div>
-
             <div className="tb-modal-body">
               <p>
-                Thanks for using <strong>EduTrackr</strong>! This is a personal project 
+                Thanks for using <strong>EduTrackr</strong>! This is a personal project
                 built entirely by me as a student. I am trying to improve it day by day.
               </p>
               <p>
-                If you find this app helpful, or have any issues or feature ideas, please 
+                If you find this app helpful, or have any issues or feature ideas, please
                 reach out! I am happy to help resolve issues and hear your thoughts.
               </p>
             </div>
-
             <div className="tb-modal-footer">
-              <a href="https://mail.google.com/mail/u/0/?tab=rm&ogbl#inbox?compose=DmwnWstsCnlpCkRhSFVMdDWCJWVhlXcTVjFrQxfhXrvWpFSBqPfFlwwzffqjmldSkLlJZBWkvZRL" className="tb-email-link" target="_blank">
+              <a href="https://mail.google.com/mail/u/0/?tab=rm&ogbl#inbox?compose=DmwnWstsCnlpCkRhSFVMdDWCJWVhlXcTVjFrQxfhXrvWpFSBqPfFlwwzffqjmldSkLlJZBWkvZRL" className="tb-email-link" target="_blank" rel="noopener noreferrer">
                 <Mail size={16} />
                 <span>Email Me</span>
               </a>
               <div className="tb-student-made">
-                  Made with <Heart size={12} className="heart-icon" /> by{" "}
-                  <a 
-                    href="https://www.linkedin.com/in/gourav-sharma-3b2558281" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="linkedin-link"
-                  >
-                    Gourav Sharma
-                  </a>
-                </div>
+                Made with <Heart size={12} className="heart-icon" /> by{" "}
+                <a href="https://www.linkedin.com/in/gourav-sharma-3b2558281" target="_blank" rel="noopener noreferrer" className="linkedin-link">
+                  Gourav Sharma
+                </a>
+              </div>
             </div>
-
           </div>
         </div>,
         document.body
