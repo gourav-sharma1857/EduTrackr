@@ -1,0 +1,582 @@
+/* ─────────────────────────────────────────────────────────────
+   Theme tokens. These read your existing variables first and fall back to
+   a dark slate palette. If your globals.css uses different names for
+   card background / border, change them in this one block.
+   ───────────────────────────────────────────────────────────── */
+.fk-planner,
+.fk-pill-wrap,
+.fk-tpanel,
+.fk-widget,
+.fk-overlay {
+  --fk-bg: var(--bg-card, #1e293b);
+  --fk-bg2: var(--bg-secondary, #0f172a);
+  --fk-line: var(--border, rgba(148, 163, 184, 0.22));
+  --fk-text: var(--text-primary, #f1f5f9);
+  --fk-text2: var(--text-secondary, #cbd5e1);
+  --fk-mut: var(--text-muted, #94a3b8);
+  --fk-accent: #6366f1; /* same indigo as assignments in your calendar */
+  --fk-break: #10b981; /* same green as to-dos */
+  --fk-red: #ef4444;
+  --fk-hh: 56px;
+  color: var(--fk-text);
+}
+
+/* shared controls */
+.fk-btn {
+  font: inherit;
+  font-size: 0.82rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 6px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--fk-line);
+  background: transparent;
+  color: var(--fk-text);
+}
+.fk-btn:hover:not(:disabled) {
+  border-color: var(--fk-accent);
+}
+.fk-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.fk-btn.fk-primary {
+  background: var(--fk-accent);
+  border-color: var(--fk-accent);
+  color: #fff;
+  font-weight: 600;
+}
+.fk-btn.fk-icon {
+  padding: 5px;
+}
+.fk-btn.fk-wide {
+  width: 100%;
+  justify-content: center;
+  margin-top: 10px;
+}
+.fk-btn.fk-live {
+  border-color: var(--fk-accent);
+  color: var(--fk-accent);
+}
+.fk-link {
+  background: none;
+  border: 0;
+  color: var(--fk-accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0;
+}
+.fk-sub,
+.fk-empty {
+  color: var(--fk-mut);
+  font-size: 0.82rem;
+  margin: 2px 0 10px;
+}
+.fk-err {
+  color: var(--fk-red);
+  font-size: 0.82rem;
+  margin: 0 0 10px;
+}
+.fk-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.fk-row.fk-end {
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+.fk-grow {
+  flex: 1;
+}
+.fk-planner :focus-visible,
+.fk-dock :focus-visible,
+.fk-widget :focus-visible,
+.fk-modal :focus-visible {
+  outline: 2px solid var(--fk-accent);
+  outline-offset: 2px;
+}
+
+/* ── Planner grid (Calendar tab, week/day) ── */
+.fk-planner {
+  display: block;
+}
+.fk-hint {
+  color: var(--fk-mut);
+  font-size: 0.85rem;
+  margin: 0 0 10px;
+}
+.fk-modal h3 {
+  margin: 0 0 2px;
+  font-size: 1rem;
+}
+.fk-wtext b {
+  font-size: 0.86rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fk-wtext small {
+  color: var(--fk-mut);
+  font-size: 0.74rem;
+}
+
+.fk-cal {
+  background: var(--fk-bg);
+  border: 1px solid var(--fk-line);
+  border-radius: 14px;
+  overflow: hidden;
+  min-width: 0;
+}
+.fk-scroller {
+  height: 74vh;
+  overflow: auto;
+  position: relative;
+}
+.fk-head,
+.fk-body {
+  display: grid;
+  grid-template-columns: 54px repeat(var(--n), minmax(0, 1fr));
+}
+.fk-head {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: var(--fk-bg);
+  border-bottom: 1px solid var(--fk-line);
+}
+.fk-head > div {
+  padding: 8px 4px 6px;
+  text-align: center;
+  border-left: 1px solid var(--fk-line);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: stretch;
+}
+.fk-head > div:first-child {
+  border: 0;
+}
+.fk-head span {
+  color: var(--fk-mut);
+  font-size: 0.78rem;
+}
+.fk-head b {
+  align-self: center;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 1.05rem;
+}
+.fk-head .fk-today b {
+  background: var(--fk-accent);
+  color: #fff;
+}
+.fk-chip {
+  font-style: normal;
+  font-size: 0.68rem;
+  padding: 1px 6px;
+  border-radius: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  color: var(--c);
+  background: color-mix(in srgb, var(--c) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c) 40%, transparent);
+}
+.fk-chip.fk-more {
+  --c: var(--fk-mut);
+}
+.fk-gut {
+  position: relative;
+}
+.fk-gut span {
+  position: absolute;
+  right: 8px;
+  transform: translateY(-50%);
+  font-size: 0.7rem;
+  color: var(--fk-mut);
+}
+.fk-col {
+  position: relative;
+  height: calc(var(--fk-hh) * 24);
+  border-left: 1px solid var(--fk-line);
+  cursor: crosshair;
+  touch-action: pan-y;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--fk-hh) - 1px),
+    var(--fk-line) calc(var(--fk-hh) - 1px),
+    var(--fk-line) var(--fk-hh)
+  );
+}
+.fk-col.fk-today {
+  background-color: color-mix(in srgb, var(--fk-accent) 6%, transparent);
+}
+.fk-ev {
+  position: absolute;
+  z-index: 2;
+  overflow: hidden;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  line-height: 1.25;
+  border-left: 4px solid var(--c);
+  background: color-mix(in srgb, var(--c) 22%, var(--fk-bg2));
+}
+.fk-ev b {
+  display: block;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fk-ev small {
+  color: var(--fk-text2);
+  opacity: 0.8;
+  font-size: 0.7rem;
+}
+.fk-ev:hover {
+  filter: brightness(1.12);
+}
+.fk-ev.fk-done b {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+.fk-ev.fk-onair {
+  background: var(--c);
+  color: #fff;
+  box-shadow: 0 0 0 2px var(--fk-text);
+}
+.fk-ghost {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  z-index: 3;
+  pointer-events: none;
+  padding: 2px 6px;
+  font-size: 0.74rem;
+  border: 2px dashed var(--fk-accent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--fk-accent) 20%, transparent);
+}
+.fk-now {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--fk-red);
+  z-index: 4;
+  pointer-events: none;
+}
+.fk-now::before {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--fk-red);
+}
+
+/* class meetings: fixed, striped, sit behind your study blocks and ignore clicks */
+.fk-class {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 0.76rem;
+  line-height: 1.25;
+  border: 1px solid color-mix(in srgb, var(--c) 55%, transparent);
+  border-left: 4px solid var(--c);
+  color: var(--fk-text);
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--c) 20%, transparent) 0 8px,
+    color-mix(in srgb, var(--c) 10%, transparent) 8px 16px
+  );
+}
+.fk-class b {
+  display: block;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fk-class small {
+  color: var(--fk-text2);
+  opacity: 0.85;
+  font-size: 0.7rem;
+}
+
+/* ── Per-page widget ── */
+.fk-widget {
+  background: var(--fk-bg);
+  border: 1px solid var(--fk-line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+.fk-widget-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.fk-wrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--fk-line);
+  border-left: 3px solid var(--c);
+  padding-left: 10px;
+  margin-left: -3px;
+}
+.fk-wtext {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fk-wrow.fk-done .fk-wtext b {
+  text-decoration: line-through;
+  color: var(--fk-mut);
+}
+.fk-check {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--c);
+  display: grid;
+  padding: 0;
+}
+
+/* ── Topbar timer pill + dropdown ── */
+.fk-pill {
+  --p: 0;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  overflow: hidden;
+  cursor: pointer;
+  font: inherit;
+  color: var(--fk-text);
+  background: var(--fk-bg);
+  border: 1px solid var(--fk-line);
+}
+.fk-pill:hover {
+  border-color: var(--fk-accent);
+}
+.fk-pill::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: calc(var(--p) * 100%);
+  background: var(--fk-accent);
+  transition: width 0.5s linear;
+}
+.fk-break .fk-pill::after {
+  background: var(--fk-break);
+}
+.fk-pill.fk-run {
+  border-color: var(--fk-accent);
+}
+.fk-break .fk-pill.fk-run {
+  border-color: var(--fk-break);
+}
+.fk-pill-time {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.fk-pill-label {
+  font-size: 0.78rem;
+  color: var(--fk-mut);
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 900px) {
+  .fk-pill-label {
+    display: none;
+  }
+}
+.fk-tpanel {
+  position: fixed;
+  z-index: 2100;
+  width: 290px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--fk-bg);
+  border: 1px solid var(--fk-line);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+.fk-tp-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fk-tp-phase {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fk-accent);
+}
+.fk-break .fk-tp-phase {
+  color: var(--fk-break);
+}
+.fk-tp-target {
+  font-size: 0.88rem;
+  color: var(--fk-text2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fk-tp-clock {
+  font-size: 3.2rem;
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  margin: 8px 0 6px;
+}
+.fk-tp-bar {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--fk-line);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.fk-tp-bar i {
+  display: block;
+  height: 100%;
+  background: var(--fk-accent);
+  transition: width 0.5s linear;
+}
+.fk-break .fk-tp-bar i {
+  background: var(--fk-break);
+}
+.fk-tpanel .fk-btn.fk-primary {
+  background: var(--fk-accent);
+}
+.fk-break .fk-tpanel .fk-btn.fk-primary,
+.fk-tpanel.fk-break .fk-btn.fk-primary {
+  background: var(--fk-break);
+  border-color: var(--fk-break);
+}
+.fk-dock-stats {
+  display: flex;
+  gap: 22px;
+  margin: 14px 0 10px;
+}
+.fk-dock-stats b {
+  display: block;
+  font-size: 1.3rem;
+}
+.fk-dock-stats span {
+  font-size: 0.74rem;
+  color: var(--fk-mut);
+}
+.fk-tp-set {
+  font-size: 0.85rem;
+  color: var(--fk-text2);
+  margin-bottom: 10px;
+}
+.fk-tp-set summary {
+  cursor: pointer;
+}
+.fk-tp-set label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+.fk-tp-set input {
+  width: 62px;
+  font: inherit;
+  color: var(--fk-text);
+  background: var(--fk-bg2);
+  border: 1px solid var(--fk-line);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+/* ── Modals ── */
+.fk-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 6, 23, 0.6);
+  padding: 16px;
+}
+.fk-modal {
+  width: min(380px, 100%);
+  padding: 20px;
+  border-radius: 16px;
+  background: var(--fk-bg);
+  border: 1px solid var(--fk-line);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+.fk-modal label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--fk-mut);
+  margin-bottom: 10px;
+}
+.fk-modal input:not([type="checkbox"]),
+.fk-modal select,
+.fk-dock-panel input {
+  font: inherit;
+  color: var(--fk-text);
+  background: var(--fk-bg2);
+  border: 1px solid var(--fk-line);
+  border-radius: 8px;
+  padding: 7px 9px;
+}
+.fk-modal input:not([type="checkbox"]),
+.fk-modal select {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+}
+.fk-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.fk-inline {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fk-pill::after,
+  .fk-tp-bar i {
+    transition: none;
+  }
+}
