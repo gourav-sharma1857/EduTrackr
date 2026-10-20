@@ -7,16 +7,17 @@ import Topbar from "./components/Topbar";
 import AuthPage from "./components/AuthPage";
 import Classes from "./components/Classes";
 import Assignments from "./components/Assignments";
-import CalendarView from "./components/CalenderView"; 
+import CalendarView from "./components/CalenderView";
 import Career from "./components/Career";
-import GpaCalculator from "./components/GpaCalculator"; 
+import GpaCalculator from "./components/GpaCalculator";
 import GradeTracker from "./components/GradeTracker";
 import Notes from "./components/Notes";
-import ToDoList from "./components/ToDoList"; 
+import ToDoList from "./components/ToDoList";
 import Profile from "./components/Profile";
 import DegreePlanner from "./components/DegreePlanner";
 import "./App.css";
 import HomePage from "./components/HomePage";
+import { FocusProvider } from "./components/Focuscontext";
 
 function ProtectedLayout({ title, children }) {
   const [user, setUser] = useState(null);
@@ -52,8 +53,6 @@ function ProtectedLayout({ title, children }) {
       </div>
     </div>
   );
-
-  
 }
 
 function App() {
@@ -78,123 +77,126 @@ function App() {
   }
 
   return (
-    <Routes>
-      
-      <Route
-        path="/auth"
-        element={user ? <Navigate to="/" replace /> : <AuthPage />}
-      />
+    /* FocusProvider lives here, above <Routes>, so the timer and planner data
+       are NOT reset when you move between pages. */
+    <FocusProvider>
+      <Routes>
+        <Route
+          path="/auth"
+          element={user ? <Navigate to="/" replace /> : <AuthPage />}
+        />
 
-      <Route
-        path="/"
-        element={
-          <ProtectedLayout title="HomePage">
-            <HomePage />
-          </ProtectedLayout>
-        }
-      />
+        <Route
+          path="/"
+          element={
+            <ProtectedLayout title="HomePage">
+              <HomePage />
+            </ProtectedLayout>
+          }
+        />
 
-      <Route
-        path="/home"
-        element={
-          <ProtectedLayout title="HomePage">
-            <HomePage />
-          </ProtectedLayout>
-        }
-      />
+        <Route
+          path="/home"
+          element={
+            <ProtectedLayout title="HomePage">
+              <HomePage />
+            </ProtectedLayout>
+          }
+        />
 
-      <Route
-        path="/classes"
-        element={
-          <ProtectedLayout title="Classes">
-            <Classes />
-          </ProtectedLayout>
-        }
-      />
+        <Route
+          path="/classes"
+          element={
+            <ProtectedLayout title="Classes">
+              <Classes />
+            </ProtectedLayout>
+          }
+        />
 
-      <Route
-        path="/assignments"
-        element={
-          <ProtectedLayout title="Assignments">
-            <Assignments />
-          </ProtectedLayout>
-        }
-      />
+        <Route
+          path="/assignments"
+          element={
+            <ProtectedLayout title="Assignments">
+              <Assignments />
+            </ProtectedLayout>
+          }
+        />
 
-      <Route
-        path="/calendar"
-        element={
-          <ProtectedLayout title="Calendar">
-            <CalendarView />
-          </ProtectedLayout>
-        }
-      />
+        <Route
+          path="/calendar"
+          element={
+            <ProtectedLayout title="Calendar">
+              <CalendarView />
+            </ProtectedLayout>
+          }
+        />
 
-      <Route
-        path="/notes"
-        element={
-          <ProtectedLayout title="Notes">
-            <Notes />
-          </ProtectedLayout>
-        }
-      />
+        <Route
+          path="/notes"
+          element={
+            <ProtectedLayout title="Notes">
+              <Notes />
+            </ProtectedLayout>
+          }
+        />
 
-      <Route
-        path="/todo"
-        element={
-          <ProtectedLayout title="To-Do List">
-            <ToDoList />
-          </ProtectedLayout>
-        }
-      />
+        <Route
+          path="/todo"
+          element={
+            <ProtectedLayout title="To-Do List">
+              <ToDoList />
+            </ProtectedLayout>
+          }
+        />
 
-      <Route
-        path="/career"
-        element={
-          <ProtectedLayout title="Career">
-            <Career />
-          </ProtectedLayout>
-        }
-      />
+        <Route
+          path="/career"
+          element={
+            <ProtectedLayout title="Career">
+              <Career />
+            </ProtectedLayout>
+          }
+        />
 
-      <Route
-        path="/degree-planner"
-        element={
-          <ProtectedLayout title="Degree Planner">
-            <DegreePlanner />
-          </ProtectedLayout>
-        }
-      />
+        <Route
+          path="/degree-planner"
+          element={
+            <ProtectedLayout title="Degree Planner">
+              <DegreePlanner />
+            </ProtectedLayout>
+          }
+        />
 
-      <Route
-        path="/gradetracker"
-        element={
-          <ProtectedLayout title="Grade Tracker">
-            <GradeTracker />
-          </ProtectedLayout>
-        }
-      />
+        <Route
+          path="/gradetracker"
+          element={
+            <ProtectedLayout title="Grade Tracker">
+              <GradeTracker />
+            </ProtectedLayout>
+          }
+        />
 
-      <Route
-        path="/GPACalculator"
-        element={
-          <ProtectedLayout title="GPA Calculator">
-            <GpaCalculator />
-          </ProtectedLayout>
-        }
-      />
+        <Route
+          path="/GPACalculator"
+          element={
+            <ProtectedLayout title="GPA Calculator">
+              <GpaCalculator />
+            </ProtectedLayout>
+          }
+        />
 
-      <Route
-        path="/profile"
-        element={
-          <ProtectedLayout title="Profile">
-            <Profile />
-          </ProtectedLayout>
-        }
-      />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedLayout title="Profile">
+              <Profile />
+            </ProtectedLayout>
+          }
+        />
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </FocusProvider>
   );
 }
 
